@@ -25,6 +25,8 @@ import os from 'os';
 import path from 'path';
 import { createRequire } from 'module';
 import { createInterface } from 'readline';
+import { getActiveProvider, loadProvidersStore } from './agent/providers-store.js';
+import type { CustomProviderConfig } from './types.js';
 
 const require = createRequire(import.meta.url);
 const { CopilotClient, approveAll } = require('@github/copilot-sdk');
@@ -37,6 +39,7 @@ interface RunOptions {
   resumeId: string | null;
   listOnly: boolean;
   model: string | null;
+  provider: string | null;
   cwd: string;
 }
 
@@ -46,6 +49,7 @@ function parseArgs(argv: string[]): RunOptions {
     resumeId: null,
     listOnly: false,
     model: null,
+    provider: null,
     cwd: process.cwd(),
   };
   const rest: string[] = [];
@@ -54,6 +58,7 @@ function parseArgs(argv: string[]): RunOptions {
     if (a === '--list')          opts.listOnly = true;
     else if (a === '--resume')   opts.resumeId = argv[++i] || null;
     else if (a === '--model')    opts.model = argv[++i] || null;
+    else if (a === '--provider') opts.provider = argv[++i] || null;
     else if (a === '--cwd')      opts.cwd = argv[++i] || opts.cwd;
     else if (a === '--help' || a === '-h') { printRunHelp(); process.exit(0); }
     else rest.push(a);
@@ -72,20 +77,149 @@ usage:
   browy run --list                   list recent sessions
 
 flags:
-  --model <id>     override the model (e.g. gpt-5-mini, claude-sonnet-4.5)
-  --cwd <path>     working directory for file/shell tools
-                   (default: current directory)
-  --help, -h       show this help
+  --provider <name|id> override provider (e.g. omniroute, deepseek, copilot)
+  --model <id>         override the model (e.g. auto, deepseek-chat, gpt-4o)
+  --cwd <path>         working directory for file/shell tools
+                       (default: current directory)
+  --help, -h           show this help
 
-available tools (provided by the Copilot SDK):
-  read_file, write_file, bash, grep, glob, web_fetch — full toolset.
+available tools (when using Copilot SDK or compatible tools):
+  read_file, write_file, bash, grep, glob, web_fetch.
 
 sessions are stored under ~/.browy/cli-sessions/.
 `);
 }
 
+function normalizeOmniRouteModel(model: string, provider: CustomProviderConfig): string {
+  if (!model) return provider.defaultModel || provider.models[0] || 'auto';
+  if (provider.type === 'omniroute' || provider.baseUrl.includes('20128') || provider.name.toLowerCase().includes('omniroute')) {
+    const m = model.toLowerCase().trim();
+    if (m === 'gemini-3.7-flash' || m === 'gemini-3.7' || m === 'gemini-3.7-flash-high' || m === 'gemini') {
+      return 'antigravity/gemini-3.7-flash-high';
+    }
+    if (m === 'gemini-3.7-flash-medium') {
+      return 'antigravity/gemini-3.7-flash-medium';
+    }
+    if (m === 'gemini-3.7-flash-low') {
+      return 'antigravity/gemini-3.7-flash-low';
+    }
+  }
+  return model;
+}
+
+async function streamCustomProviderOnce(provider: CustomProviderConfig, model: string, userPrompt: string): Promise<void> {
+  const resolvedModel = normalizeOmniRouteModel(model, provider);
+  const url = `${provider.baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (provider.apiKey) {
+    headers['Authorization'] = `Bearer ${provider.apiKey}`;
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: resolvedModel,
+      messages: [{ role: 'user', content: userPrompt }],
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    process.stderr.write(`\x1b[31merror: HTTP ${res.status} ${res.statusText} - ${errText}\x1b[0m\n`);
+    return;
+  }
+
+  if (!res.body) {
+    process.stderr.write(`\x1b[31merror: No response body received\x1b[0m\n`);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || !line.startsWith('data:')) continue;
+      const dataStr = line.slice(5).trim();
+      if (dataStr === '[DONE]') break;
+      try {
+        const parsed = JSON.parse(dataStr);
+        const delta = parsed.choices?.[0]?.delta;
+        if (delta?.reasoning_content) {
+          process.stderr.write(`\x1b[2m${delta.reasoning_content}\x1b[0m`);
+        }
+        if (delta?.content) {
+          process.stdout.write(delta.content);
+        }
+      } catch {}
+    }
+  }
+  process.stdout.write('\n');
+}
+
+async function runCustomProviderHeadless(provider: CustomProviderConfig, opts: RunOptions): Promise<void> {
+  const model = opts.model || provider.defaultModel || provider.models[0] || 'auto';
+  process.stderr.write(`\x1b[2mprovider: ${provider.name} (${provider.type}) · model: ${model}\x1b[0m\n`);
+  process.stderr.write(`\x1b[2mendpoint: ${provider.baseUrl}\x1b[0m\n`);
+
+  if (opts.task) {
+    await streamCustomProviderOnce(provider, model, opts.task);
+    process.exit(0);
+  }
+
+  // Interactive REPL.
+  process.stderr.write(`browy run — terminal agent (${provider.name})\n`);
+  process.stderr.write(`\x1b[2mtype a prompt; "exit" to quit.\x1b[0m\n`);
+  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${provider.name}> ` });
+  rl.prompt();
+  rl.on('line', async (line) => {
+    const text = line.trim();
+    if (!text) { rl.prompt(); return; }
+    if (text === 'exit' || text === 'quit') { rl.close(); return; }
+    try {
+      await streamCustomProviderOnce(provider, model, text);
+    } catch (err) {
+      console.error('error:', (err as Error).message);
+    }
+    rl.prompt();
+  });
+  rl.on('close', () => process.exit(0));
+}
+
 export async function runHeadless(argv: string[]): Promise<void> {
   const opts = parseArgs(argv);
+
+  // Check if a custom provider is selected or active
+  let customProvider: CustomProviderConfig | null = null;
+  if (opts.provider) {
+    if (opts.provider.toLowerCase() !== 'copilot' && opts.provider.toLowerCase() !== 'github') {
+      const store = loadProvidersStore();
+      customProvider = store.providers.find(p => p.id === opts.provider || p.name.toLowerCase().includes(opts.provider!.toLowerCase())) || null;
+      if (!customProvider) {
+        console.error(`unknown provider: ${opts.provider}. Available custom providers: ${store.providers.map(p => p.id).join(', ')}`);
+        process.exit(1);
+      }
+    }
+  } else {
+    customProvider = getActiveProvider();
+  }
+
+  if (customProvider) {
+    await runCustomProviderHeadless(customProvider, opts);
+    return;
+  }
 
   // Ensure the workdir exists — SDK uses it as cwd-tag for session listing.
   const fs = await import('fs');

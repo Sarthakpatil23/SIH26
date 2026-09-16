@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shinscan — LLM Providers & AI Gateways</title>
+  <style>
+    /* ════════════════════════════════════════════════════════════════
+       BROWY PROVIDERS — Vercel Geist Design System (DESIGN.md)
+       Stark black-on-near-white aesthetic, 1px hairlines, Geist typography.
+       ════════════════════════════════════════════════════════════════ */
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:                 #171717;
+      --on-primary:              #ffffff;
+      --ink:                     #171717;
+      --body:                    #4d4d4d;
+      --mute:                    #8f8f8f;
+      --faint:                   #a1a1a1;
+      --hairline:                #ebebeb;
+      --hairline-soft:           #f2f2f2;
+      --canvas:                  #fafafa;
+      --canvas-elevated:         #ffffff;
+
+      --link:                    #0070f3;
+      --link-deep:               #0761d1;
+      --link-soft:               #d3e5ff;
+      --error:                   #ee0000;
+      --warning:                 #f5a623;
+      --warning-soft:            #ffefcf;
+      --warning-deep:            #ab570a;
+      --success:                 #10b981;
+      --success-soft:            #d1fae5;
+
+      --font-sans:               'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --font-mono:               'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+      --radius-sm:               6px;
+      --radius-md:               12px;
+      --radius-lg:               16px;
+      --radius-pill:             100px;
+      --radius-full:             9999px;
+
+      --shadow-whisper:          0px 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-card:             0px 1px 3px rgba(0, 0, 0, 0.04), 0px 1px 2px rgba(0, 0, 0, 0.02);
+      --shadow-floating:         0px 8px 24px rgba(0, 0, 0, 0.12), 0px 2px 6px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary:                 #ededed;
+        --on-primary:              #000000;
+        --ink:                     #ededed;
+        --body:                    #a1a1a1;
+        --mute:                    #737373;
+        --faint:                   #525252;
+        --hairline:                #262626;
+        --hairline-soft:           #171717;
+        --canvas:                  #0a0a0a;
+        --canvas-elevated:         #111111;
+        --link:                    #0070f3;
+        --link-deep:               #3291ff;
+        --link-soft:               #00254d;
+        --error:                   #f87171;
+        --warning:                 #f5a623;
+        --warning-soft:            #332400;
+        --warning-deep:            #fbbf24;
+        --success:                 #10b981;
+        --success-soft:            #064e3b;
+        --shadow-whisper:          0px 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-card:             0px 1px 3px rgba(0, 0, 0, 0.4);
+        --shadow-floating:         0px 8px 24px rgba(0, 0, 0, 0.6);
+      }
+    }
+
+    html, body {
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      padding: 36px 24px 80px;
+      min-height: 100vh;
+    }
+
+    main {
+      width: 100%;
+      max-width: 800px;
+    }
+
+    /* ── Top Bar ───────────────────────────────────────────────────── */
+    .hdr {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .hdr .brand {
+      font-size: 20px;
+      color: var(--ink);
+      letter-spacing: -0.6px;
+      font-weight: 600;
+    }
+    .hdr .crumb {
+      color: var(--mute);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .hdr .nav-back {
+      margin-left: auto;
+      color: var(--mute);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      background: var(--canvas-elevated);
+      transition: all 0.15s ease;
+    }
+    .hdr .nav-back:hover {
+      color: var(--ink);
+      border-color: var(--ink);
+    }
+
+    /* ── Active Status Banner ──────────────────────────────────────── */
+    .active-card {
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-whisper);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .active-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .active-label {
+      color: var(--mute);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .active-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+    }
+    .active-name {
+      color: var(--ink);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+    .active-meta {
+      color: var(--body);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    /* ── Presets Bar ───────────────────────────────────────────────── */
+    .presets-card {
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-whisper);
+      padding: 14px 18px;
+      margin-bottom: 24px;
+    }
+    .presets-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--mute);
+      margin-bottom: 10px;
+    }
+    .presets-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .preset-btn {
+      background: var(--hairline-soft);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-pill);
+      padding: 6px 14px;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .preset-btn:hover {
+      border-color: var(--ink);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-whisper);
+    }
+    .preset-badge {
+      font-size: 10px;
+      color: var(--link);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+
+    /* ── Section Container ─────────────────────────────────────────── */
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-head h2 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: var(--ink);
+    }
+
+    /* ── Provider Cards Grid ───────────────────────────────────────── */
+    .providers-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .provider-card {
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-whisper);
+      padding: 16px 18px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      position: relative;
+    }
+    .provider-card:hover {
+      box-shadow: var(--shadow-card);
+      border-color: var(--mute);
+    }
+    .provider-card.is-active {
+      border-color: var(--ink);
+      border-left: 4px solid var(--ink);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .card-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .type-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--hairline-soft);
+      border: 1px solid var(--hairline);
+      color: var(--body);
+    }
+    .type-badge.omniroute {
+      background: rgba(0, 112, 243, 0.08);
+      border-color: rgba(0, 112, 243, 0.25);
+      color: var(--link);
+    }
+    .type-badge.deepseek {
+      background: rgba(16, 185, 129, 0.08);
+      border-color: rgba(16, 185, 129, 0.25);
+      color: var(--success);
+    }
+
+    .active-pill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--primary);
+      color: var(--on-primary);
+    }
+
+    .card-endpoint {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--mute);
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+
+    .card-models-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--mute);
+      margin-bottom: 4px;
+    }
+    .card-models {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .model-chip {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--hairline-soft);
+      border: 1px solid var(--hairline);
+      color: var(--ink);
+    }
+    .model-chip.default {
+      border-color: var(--link);
+      color: var(--link);
+      font-weight: 500;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--hairline);
+      padding-top: 12px;
+      margin-top: 6px;
+    }
+
+    /* ── Buttons (DESIGN.md Vercel Buttons) ─────────────────────────── */
+    .btn {
+      background: var(--canvas-elevated);
+      color: var(--ink);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      padding: 6px 14px;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.12s ease;
+    }
+    .btn:hover {
+      background: var(--hairline-soft);
+      border-color: var(--mute);
+    }
+    .btn.primary {
+      background: var(--primary);
+      color: var(--on-primary);
+      border-color: var(--primary);
+      border-radius: var(--radius-pill);
+    }
+    .btn.primary:hover {
+      opacity: 0.9;
+    }
+    .btn.outline-primary {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .btn.outline-primary:hover {
+      background: var(--primary);
+      color: var(--on-primary);
+    }
+    .btn.danger {
+      color: var(--error);
+      border-color: rgba(238, 0, 0, 0.2);
+    }
+    .btn.danger:hover {
+      background: rgba(238, 0, 0, 0.08);
+      border-color: var(--error);
+    }
+    .btn.sm {
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ── Form Card ─────────────────────────────────────────────────── */
+    .form-card {
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-whisper);
+      padding: 20px;
+      margin-bottom: 24px;
+      display: none;
+    }
+    .form-card.open { display: block; }
+    .form-card-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      margin-bottom: 16px;
+      color: var(--ink);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-group.full { grid-column: span 2; }
+    .form-group label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--mute);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .form-input, .form-select {
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--ink);
+      box-shadow: 0 0 0 1px var(--ink);
+    }
+    .form-input.mono { font-family: var(--font-mono); font-size: 12px; }
+
+    .key-wrapper {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .key-wrapper input { flex: 1; }
+
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid var(--hairline);
+      padding-top: 14px;
+    }
+
+    /* ── Toast ─────────────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--ink);
+      border: 1px solid var(--hairline);
+      color: var(--on-primary);
+      padding: 9px 20px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: var(--shadow-floating);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 1000;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-2px);
+    }
+    .toast.err {
+      background: var(--error);
+      color: #ffffff;
+    }
+    .toast.ok {
+      background: var(--success);
+      color: #ffffff;
+    }
+
+    .empty-state {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--mute);
+      font-size: 12px;
+      border: 1px dashed var(--hairline);
+      border-radius: var(--radius-md);
+      background: var(--canvas-elevated);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <!-- Header -->
+    <div class="hdr">
+      <div class="brand">shinscan</div>
+      <div class="crumb">// llm providers &amp; gateways</div>
+      <a href="options.html" class="nav-back">← Back to Settings</a>
+    </div>
+
+    <!-- Active Routing Banner -->
+    <div class="active-card" id="activeCard">
+      <div class="active-info">
+        <span class="active-label"><span class="active-dot"></span> Current Active Provider</span>
+        <span class="active-name" id="activeProviderName">GitHub Copilot (Built-in Default)</span>
+        <span class="active-meta" id="activeProviderMeta">Routes through the Copilot client subscription</span>
+      </div>
+      <button class="btn sm" id="resetCopilotBtn">Switch to Built-in Copilot</button>
+    </div>
+
+    <!-- Quick Presets -->
+    <div class="presets-card">
+      <div class="presets-title">// Quick Add Presets (1-click template)</div>
+      <div class="presets-row">
+        <button class="preset-btn" data-preset="omniroute">
+          <span>⚡ OmniRoute AI Gateway</span>
+          <span class="preset-badge">Router</span>
+        </button>
+        <button class="preset-btn" data-preset="deepseek">
+          <span>🐳 DeepSeek Official API</span>
+          <span class="preset-badge">Direct</span>
+        </button>
+        <button class="preset-btn" data-preset="openrouter">
+          <span>🌐 OpenRouter</span>
+          <span class="preset-badge">Multi</span>
+        </button>
+        <button class="preset-btn" data-preset="ollama">
+          <span>💻 Ollama (Local)</span>
+          <span class="preset-badge">Local</span>
+        </button>
+        <button class="preset-btn" data-preset="custom">
+          <span>⚙ Custom OpenAI-Compatible</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Form: Add / Edit Provider -->
+    <div class="form-card" id="providerFormCard">
+      <div class="form-card-title" id="formTitle">Configure Provider</div>
+      <form id="providerForm">
+        <input type="hidden" id="providerId" value="" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="providerName">Provider Name</label>
+            <input class="form-input" id="providerName" placeholder="e.g. OmniRoute" required />
+          </div>
+
+          <div class="form-group">
+            <label for="providerType">Protocol / Type</label>
+            <select class="form-select" id="providerType">
+              <option value="omniroute">OmniRoute / AI Gateway</option>
+              <option value="deepseek">DeepSeek API</option>
+              <option value="openai-compatible">OpenAI-Compatible Endpoint</option>
+              <option value="anthropic">Anthropic-Compatible</option>
+              <option value="custom">Custom Provider</option>
+            </select>
+          </div>
+
+          <div class="form-group full">
+            <label for="providerUrl">Base URL / Endpoint</label>
+            <input class="form-input mono" id="providerUrl" placeholder="https://api.omniroute.ai/v1" required />
+          </div>
+
+          <div class="form-group full">
+            <label for="providerKey">API Key</label>
+            <div class="key-wrapper">
+              <input class="form-input mono" type="password" id="providerKey" placeholder="sk-..." />
+              <button type="button" class="btn sm" id="toggleKeyBtn">Show</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label for="providerModels">Supported Models (comma-separated)</label>
+            <input class="form-input mono" id="providerModels" placeholder="deepseek-chat, deepseek-reasoner, claude-3-7-sonnet" required />
+          </div>
+
+          <div class="form-group">
+            <label for="providerDefaultModel">Default Model</label>
+            <input class="form-input mono" id="providerDefaultModel" placeholder="e.g. deepseek-chat" />
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn" id="cancelFormBtn">Cancel</button>
+          <button type="button" class="btn" id="testFormBtn">Test Connection</button>
+          <button type="submit" class="btn primary" id="saveProviderBtn">Save Provider</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Section: Configured Providers -->
+    <div class="section-head">
+      <h2>Configured Custom Providers</h2>
+      <button class="btn primary sm" id="addNewBtn">+ Add Custom Provider</button>
+    </div>
+
+    <div class="providers-grid" id="providersList">
+      <div class="empty-state">No custom providers configured yet. Click a preset above or "+ Add Custom Provider" to begin.</div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="providers.js"></script>
+</body>
+</html>

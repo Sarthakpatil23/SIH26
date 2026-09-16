@@ -265,7 +265,7 @@ function exportChat() {
     const title = deriveChatTitle(msgs.innerHTML) || 'Untitled chat';
     lines.push('# ' + title);
     lines.push('');
-    lines.push('_Exported from Browy on ' + new Date().toISOString() + '_');
+    lines.push('_Exported from Shinscan on ' + new Date().toISOString() + '_');
     lines.push('');
     for (const bub of bubs) {
       const isUser = bub.classList.contains('u');
@@ -274,7 +274,7 @@ function exportChat() {
         lines.push('');
         lines.push((bub.innerText || bub.textContent || '').trim());
       } else {
-        lines.push('## Browy');
+        lines.push('## Shinscan');
         lines.push('');
         const reasoning = bub.querySelector('.reasoning');
         if (reasoning) {
@@ -316,7 +316,7 @@ function exportChat() {
     const safeTitle = (title || 'chat').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 40);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `browy-${safeTitle}-${ts}.md`;
+    a.download = `shinscan-${safeTitle}-${ts}.md`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -612,8 +612,8 @@ function setControlsState(state) {
     inp_.style.opacity = typingAllowed ? '' : '0.4';
     inp_.style.cursor = typingAllowed ? '' : 'not-allowed';
     inp_.placeholder = state === 'online' ? ''
-      : state === 'booting' ? 'starting browy backend — you can start typing…'
-      : 'offline — install the browy backend to chat';
+      : state === 'booting' ? 'starting shinscan backend — you can start typing…'
+      : 'offline — install the shinscan backend to chat';
   }
   // Send is allowed while booting (queued), but only with actual text.
   const go = document.getElementById('goBtn');
@@ -690,7 +690,7 @@ function connect() {
         setControlsState('booting');
         hideConnBanner();
         const hint = document.querySelector('#empty .hint');
-        if (hint) hint.textContent = '// starting the browy backend — first run takes a few seconds';
+        if (hint) hint.textContent = '// starting the shinscan backend — first run takes a few seconds';
       } catch {}
       return;
     }
@@ -701,11 +701,11 @@ function connect() {
       tabTitleText = '—'; currentAction = null; setTtl();
       try {
         const hint = document.querySelector('#empty .hint');
-        if (hint) hint.textContent = '// offline. check that the browy backend is installed and running';
+        if (hint) hint.textContent = '// offline. check that the shinscan backend is installed and running';
         setControlsState('offline');
         if (typeof closeChatsOverlay === 'function') closeChatsOverlay();
         if (raw.type === '__host_missing') {
-          showConnBanner('Browy backend not installed.', {
+          showConnBanner('Shinscan backend not installed.', {
             action: { label: 'Install →', href: INSTALL_PS1_URL },
           });
         } else if (raw.type === '__host_stale') {
@@ -913,11 +913,32 @@ function renderBrowsers(list) {
   browsersTotal.textContent = String(installed);
 }
 
-// ── Settings window (separate Electron window) ───────────────────
+// ── Settings & Providers windows ──────────────────────────────────
+const providersBtn = document.getElementById('providersBtn');
+providersBtn?.addEventListener('click', () => {
+  if (chrome?.tabs?.create) {
+    chrome.tabs.create({ url: chrome.runtime.getURL('providers.html') });
+  } else {
+    window.open('providers.html', '_blank');
+  }
+});
+
 const settingsBtn = document.getElementById('settingsBtn');
 settingsBtn?.addEventListener('click', () => {
   if (window.winctl?.openSettings) window.winctl.openSettings();
   else window.open('settings.html', '_blank', 'width=460,height=600');
+});
+
+// ── Hero suggestion chips ─────────────────────────────────────────
+document.addEventListener('click', (e) => {
+  const chip = e.target?.closest?.('.sugg-chip');
+  if (!chip) return;
+  const prompt = chip.getAttribute('data-prompt');
+  if (inp && prompt) {
+    inp.value = prompt;
+    inp.focus();
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  }
 });
 
 // ── Live assistant bubble (streaming target) ─────────────────────
@@ -1144,7 +1165,7 @@ function addAuthErrorBubble(detail) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.textContent = 'Sign in to GitHub Copilot';
-  btn.style.cssText = 'background:var(--accent,#4ade80); color:#0a1f12; border:none; border-radius:4px; padding:6px 12px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; text-transform:uppercase; letter-spacing:0.04em;';
+  btn.style.cssText = 'background:var(--primary,#171717); color:var(--on-primary,#ffffff); border:none; border-radius:var(--radius-pill,100px); padding:6px 14px; font-family:inherit; font-size:12px; font-weight:500; cursor:pointer; letter-spacing:-0.1px;';
   btn.addEventListener('click', () => {
     browyPost({ type: 'auth.signin' });
     btn.disabled = true;

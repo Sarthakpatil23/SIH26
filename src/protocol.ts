@@ -12,7 +12,7 @@
 //
 // Naming convention: <namespace>.<verb>. Lowercase, dot-separated.
 
-import type { ToolCallRecord, ModelOption, BrowserStatus, ActiveBrowser } from './types.js';
+import type { ToolCallRecord, ModelOption, BrowserStatus, ActiveBrowser, CustomProviderConfig } from './types.js';
 
 // ── Capabilities ───────────────────────────────────────────────────────────
 //
@@ -149,6 +149,30 @@ export interface ChatDelete {
   id: string;
 }
 
+export interface ProviderList {
+  type: 'provider.list';
+}
+
+export interface ProviderSave {
+  type: 'provider.save';
+  provider: CustomProviderConfig;
+}
+
+export interface ProviderDelete {
+  type: 'provider.delete';
+  id: string;
+}
+
+export interface ProviderSetActive {
+  type: 'provider.setActive';
+  id: string | null;
+}
+
+export interface ProviderTest {
+  type: 'provider.test';
+  provider: CustomProviderConfig;
+}
+
 export type ClientMessage =
   | ClientHello
   | SessionStart
@@ -163,7 +187,12 @@ export type ClientMessage =
   | SetModel
   | ChatList
   | ChatHistory
-  | ChatDelete;
+  | ChatDelete
+  | ProviderList
+  | ProviderSave
+  | ProviderDelete
+  | ProviderSetActive
+  | ProviderTest;
 
 // ── Server → Client ────────────────────────────────────────────────────────
 
@@ -360,6 +389,20 @@ export interface ChatDeleteResult {
   ok: boolean;
 }
 
+export interface ProviderListResult {
+  type: 'provider.list.result';
+  activeProviderId: string | null;
+  providers: CustomProviderConfig[];
+}
+
+export interface ProviderTestResult {
+  type: 'provider.test.result';
+  providerId: string;
+  ok: boolean;
+  error?: string;
+  models?: string[];
+}
+
 export type ServerMessage =
   | ServerHello
   | SessionReady
@@ -383,7 +426,9 @@ export type ServerMessage =
   | FocusedTab
   | ChatListResult
   | ChatHistoryResult
-  | ChatDeleteResult;
+  | ChatDeleteResult
+  | ProviderListResult
+  | ProviderTestResult;
 
 // ── Transport interface ────────────────────────────────────────────────────
 //

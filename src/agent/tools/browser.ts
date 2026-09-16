@@ -14,6 +14,8 @@ export interface BrowserToolContext {
    *  tab directly from the browser. The playwright-backed context populates
    *  this implicitly via Agent.refreshTabInfo() instead. */
   getActiveTabInfo?: () => Promise<{ url: string; title: string; tabCount: number; brand: string } | null>;
+  /** Optional callback invoked when a tool captures a visual screenshot frame. */
+  onVisionCaptured?: (frame: { base64: string; mimeType: string; width: number; height: number; dpr: number }) => void;
 }
 
 export interface ToolHandler {
@@ -167,7 +169,11 @@ register({
     const before = await captureClickState(ctx, idx);
     const resolved: ResolvedElement = await resolveIndex(cdp, idx);
     if (!resolved.found || !resolved.rect) {
-      return JSON.stringify({ success: false, error: resolved.reason || `index ${idx} not found — call inspect_page` });
+      return JSON.stringify({
+        success: false,
+        error: resolved.reason || `index ${idx} not found — call inspect_page`,
+        hint: 'If the target is inside a <canvas> (such as Google Sheets cells or Figma artboard), use vision fallback: call look_at_screen and click_coordinate(x, y).',
+      });
     }
     await dispatchClick(ctx, resolved.rect.cx, resolved.rect.cy);
     // Brief wait for navigation/render to settle.
@@ -193,7 +199,7 @@ register({
     if (urlChanged) hint = 'Page changed — call inspect_page before next interaction.';
     else if (modalAppeared) hint = 'A modal/dialog appeared — call inspect_page to see its contents.';
     else if (modalClosed) hint = 'A modal/dialog closed.';
-    else if (!observed) hint = 'No observable change (no URL/title/DOM/modal/state delta). Click may have been intercepted, the element may be a no-op, or the SPA is still rendering — try wait_for / scroll / different element / await_user.';
+    else if (!observed) hint = 'No observable change (no URL/title/DOM/modal/state delta). If clicking inside a <canvas> (Google Sheets, Figma, graphics), use look_at_screen + click_coordinate(x, y).';
     return JSON.stringify({
       success: true,
       tag: resolved.tag,
@@ -227,7 +233,13 @@ register({
     if (!Number.isFinite(idx) || idx < 1) return JSON.stringify({ error: 'index must be a positive integer' });
     const cdp = ctx.cdp as unknown as { send: (m: string, p?: unknown) => Promise<unknown> };
     const resolved: ResolvedElement = await resolveIndex(cdp, idx);
-    if (!resolved.found) return JSON.stringify({ success: false, error: resolved.reason || `index ${idx} not found — call inspect_page` });
+    if (!resolved.found) {
+      return JSON.stringify({
+        success: false,
+        error: resolved.reason || `index ${idx} not found — call inspect_page`,
+        hint: 'If you are typing into a spreadsheet cell (e.g. Google Sheets A1) or canvas control, use type_coordinate(x, y, text).',
+      });
+    }
     if (!resolved.isEditable) return JSON.stringify({ success: false, error: `element [${idx}] (<${resolved.tag}>) is not editable` });
     const expr = `(() => {
       const el = document.querySelector('[data-browy-id="${idx}"]');
@@ -866,6 +878,204 @@ register({
       }
     } catch {}
     return JSON.stringify({ success: true, saved: file, sizeKB: Math.round(data.length * 0.75 / 1024) });
+  },
+});
+
+register({
+  def: {
+    type: 'function',
+    name: 'look_at_screen',
+    description: 'Capture a fresh visual screenshot of the viewport and activate vision analysis. Use this whenever DOM indexed elements in <page_snapshot> do not provide what you need (e.g. Google Sheets cells, Figma canvas, interactive games, or visual-only content). Returns viewport dimensions so you can use click_coordinate(x, y) or type_coordinate(x, y, text).',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  async run(_args, ctx) {
+    const { captureVisionFrame } = await import('../vision-fallback.js');
+    const frame = await captureVisionFrame(ctx.cdp as any);
+    if (!frame) return JSON.stringify({ error: 'Failed to capture visual screenshot from browser.' });
+    if (ctx.onVisionCaptured) {
+      ctx.onVisionCaptured(frame);
+    }
+    return JSON.stringify({
+      success: true,
+      message: 'Visual screenshot captured. Vision context updated for this turn.',
+      viewport: { width: frame.width, height: frame.height, dpr: frame.dpr },
+      instruction: `Specify coordinates in [0..${frame.width}, 0..${frame.height}] using click_coordinate(x, y) or type_coordinate(x, y, text).`,
+    });
+  },
+});
+
+register({
+  def: {
+    type: 'function',
+    name: 'click_coordinate',
+    description: 'Click at exact pixel coordinates (x, y) on the viewport. Use this to interact with <canvas> elements, spreadsheet cells (like Google Sheets cell A1), Figma artboards, charts, or elements inaccessible through DOM index. Supports optional double-clicking.',
+    parameters: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Horizontal coordinate in viewport pixels (0 is left edge).' },
+        y: { type: 'number', description: 'Vertical coordinate in viewport pixels (0 is top edge).' },
+        clickCount: { type: 'number', description: '1 for single click (default), 2 for double click (e.g. to open cell editor).' },
+        button: { type: 'string', description: 'Mouse button: "left" (default), "right", or "middle".' },
+      },
+      required: ['x', 'y'],
+    },
+  },
+  async run(args, ctx) {
+    const x = Math.round(Number(args.x));
+    const y = Math.round(Number(args.y));
+    const clickCount = Math.max(1, Math.min(3, Math.round(Number(args.clickCount) || 1)));
+    const btn = (args.button === 'right' || args.button === 'middle') ? args.button : 'left';
+
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved', x, y, button: 'none', clickCount: 0,
+    });
+    for (let c = 1; c <= clickCount; c++) {
+      await ctx.cdp.send('Input.dispatchMouseEvent', {
+        type: 'mousePressed', x, y, button: btn, clickCount: c,
+      });
+      await ctx.cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseReleased', x, y, button: btn, clickCount: c,
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      clicked: { x, y, clickCount, button: btn },
+    });
+  },
+});
+
+register({
+  def: {
+    type: 'function',
+    name: 'type_coordinate',
+    description: 'Click at (x, y) to focus a visual target (such as a spreadsheet cell in Google Sheets or an inline canvas input), wait briefly, and type the given text. Optionally clears prior content or presses Enter.',
+    parameters: {
+      type: 'object',
+      properties: {
+        x: { type: 'number', description: 'Horizontal coordinate in viewport pixels.' },
+        y: { type: 'number', description: 'Vertical coordinate in viewport pixels.' },
+        text: { type: 'string', description: 'Text to type into the focused coordinate.' },
+        clear: { type: 'boolean', description: 'If true, selects all (Ctrl+A) and deletes before typing (default: true).' },
+        pressEnter: { type: 'boolean', description: 'If true, presses Enter after typing (default: true, ideal for spreadsheet cells).' },
+      },
+      required: ['x', 'y', 'text'],
+    },
+  },
+  async run(args, ctx) {
+    const x = Math.round(Number(args.x));
+    const y = Math.round(Number(args.y));
+    const text = String(args.text ?? '');
+    const clear = args.clear !== false;
+    const pressEnter = args.pressEnter !== false;
+
+    // 1. Move and double-click coordinate to open/focus editor (e.g. Google Sheets cell)
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved', x, y, button: 'none', clickCount: 0,
+    });
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x, y, button: 'left', clickCount: 1,
+    });
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x, y, button: 'left', clickCount: 1,
+    });
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x, y, button: 'left', clickCount: 2,
+    });
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x, y, button: 'left', clickCount: 2,
+    });
+
+    // Wait 120ms for focus / cell editor mounting
+    await new Promise((r) => setTimeout(r, 120));
+
+    // 2. Clear if requested
+    if (clear) {
+      await ctx.cdp.send('Input.dispatchKeyEvent', {
+        type: 'rawKeyDown', windowsVirtualKeyCode: 65, unmodifiedText: 'a', text: 'a', modifiers: 2,
+      });
+      await ctx.cdp.send('Input.dispatchKeyEvent', {
+        type: 'keyUp', windowsVirtualKeyCode: 65, unmodifiedText: 'a', text: 'a', modifiers: 2,
+      });
+      await ctx.cdp.send('Input.dispatchKeyEvent', {
+        type: 'rawKeyDown', windowsVirtualKeyCode: 8, key: 'Backspace', code: 'Backspace',
+      });
+      await ctx.cdp.send('Input.dispatchKeyEvent', {
+        type: 'keyUp', windowsVirtualKeyCode: 8, key: 'Backspace', code: 'Backspace',
+      });
+    }
+
+    // 3. Insert text via Input.insertText
+    await ctx.cdp.send('Input.insertText', { text });
+
+    // 4. Press Enter if requested
+    if (pressEnter) {
+      await new Promise((r) => setTimeout(r, 80));
+      await ctx.cdp.send('Input.dispatchKeyEvent', {
+        type: 'rawKeyDown', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter', text: '\r',
+      });
+      await ctx.cdp.send('Input.dispatchKeyEvent', {
+        type: 'keyUp', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter',
+      });
+    }
+
+    return JSON.stringify({
+      success: true,
+      typedAt: { x, y },
+      textLength: text.length,
+      pressedEnter: pressEnter,
+    });
+  },
+});
+
+register({
+  def: {
+    type: 'function',
+    name: 'drag_coordinate',
+    description: 'Perform a smooth mouse drag from (fromX, fromY) to (toX, toY). Use for canvas drawings, sliders, reordering, or selecting regions.',
+    parameters: {
+      type: 'object',
+      properties: {
+        fromX: { type: 'number', description: 'Start X coordinate.' },
+        fromY: { type: 'number', description: 'Start Y coordinate.' },
+        toX: { type: 'number', description: 'End X coordinate.' },
+        toY: { type: 'number', description: 'End Y coordinate.' },
+        steps: { type: 'number', description: 'Number of interpolation steps (default: 10).' },
+      },
+      required: ['fromX', 'fromY', 'toX', 'toY'],
+    },
+  },
+  async run(args, ctx) {
+    const fx = Math.round(Number(args.fromX));
+    const fy = Math.round(Number(args.fromY));
+    const tx = Math.round(Number(args.toX));
+    const ty = Math.round(Number(args.toY));
+    const steps = Math.max(2, Math.min(50, Math.round(Number(args.steps) || 10)));
+
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved', x: fx, y: fy, button: 'none', clickCount: 0,
+    });
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x: fx, y: fy, button: 'left', clickCount: 1,
+    });
+
+    for (let i = 1; i <= steps; i++) {
+      const cx = Math.round(fx + (tx - fx) * (i / steps));
+      const cy = Math.round(fy + (ty - fy) * (i / steps));
+      await ctx.cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x: cx, y: cy, button: 'left', clickCount: 1,
+      });
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    await ctx.cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x: tx, y: ty, button: 'left', clickCount: 1,
+    });
+
+    return JSON.stringify({
+      success: true,
+      dragged: { from: { x: fx, y: fy }, to: { x: tx, y: ty }, steps },
+    });
   },
 });
 

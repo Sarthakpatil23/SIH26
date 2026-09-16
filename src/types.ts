@@ -118,3 +118,27 @@ export interface ModelOption {
   name: string;
   vendor?: string;
 }
+
+export type CustomProviderType =
+  | 'omniroute'
+  | 'deepseek'
+  | 'openai-compatible'
+  | 'anthropic'
+  | 'custom';
+
+export interface CustomProviderConfig {
+  id: string;
+  name: string;
+  type: CustomProviderType;
+  baseUrl: string;
+  apiKey: string;
+  models: string[];
+  defaultModel?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface ProvidersStore {
+  activeProviderId: string | null; // null = Copilot default
+  providers: CustomProviderConfig[];
+}

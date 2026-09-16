@@ -1,15 +1,15 @@
-/* Browy DevTools panel — styled to match the Chrome/Edge DevTools Console.
- * Honours the user's DevTools theme (light / dark) via prefers-color-scheme. */
+/* Browy DevTools panel — styled per Vercel Geist Design System (DESIGN.md)
+ * Supports DevTools theme (light / dark) and data-theme attribute. */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
   height: 100vh;
   width: 100vw;
-  font-family: Menlo, Monaco, "DejaVu Sans Mono", "Lucida Console", Consolas, monospace;
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   line-height: 1.45;
-  -webkit-font-smoothing: subpixel-antialiased;
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
@@ -19,66 +19,66 @@ body {
   position: relative;
 }
 
-/* ── Theme tokens (DevTools Console palette) ─────────────────────────────── */
+/* ── Theme tokens (Vercel Geist Palette) ─────────────────────────────────── */
 
 :root {
-  /* Light (DevTools default light) */
-  --bg:        #ffffff;
-  --bg-alt:    #f3f3f3;
-  --bg-row-hover: rgba(0,0,0,0.05);
-  --fg:        #202124;
-  --fg-dim:    #5f6368;
-  --fg-faint:  #9aa0a6;
-  --border:    #d0d0d0;
-  --border-strong: #b8b8b8;
+  /* Light (Geist default near-white) */
+  --bg:              #fafafa;
+  --bg-alt:          #ffffff;
+  --bg-row-hover:    rgba(0, 0, 0, 0.03);
+  --fg:              #171717;
+  --fg-dim:          #4d4d4d;
+  --fg-faint:        #8f8f8f;
+  --border:          #ebebeb;
+  --border-strong:   #d4d4d4;
 
-  --prompt:    #1a73e8;
-  --user:      #202124;
-  --assistant: #202124;
-  --tool:      #8430ce;
-  --info:      #0b57d0;
-  --ok:        #1e7e34;
-  --warn:      #b06000;
-  --err:       #c5221f;
-  --err-bg:    #fce8e6;
-  --warn-bg:   #fff8c5;
-  --link:      #1a73e8;
-  --selection: #b3d4fc;
-  --kbd-bg:    #f5f5f5;
-  --kbd-border:#dadce0;
-  --tool-card-bg: #f7f7f9;
-  --tool-card-border: #e0e0e0;
-  --reasoning: #5f6368;
+  --prompt:          #0070f3;
+  --user:            #171717;
+  --assistant:       #171717;
+  --tool:            #7928ca;
+  --info:            #0070f3;
+  --ok:              #10b981;
+  --warn:            #f5a623;
+  --err:             #ee0000;
+  --err-bg:          rgba(238, 0, 0, 0.05);
+  --warn-bg:         #ffefcf;
+  --link:            #0070f3;
+  --selection:       rgba(0, 112, 243, 0.15);
+  --kbd-bg:          #f2f2f2;
+  --kbd-border:      #ebebeb;
+  --tool-card-bg:    #ffffff;
+  --tool-card-border:#ebebeb;
+  --reasoning:       #8f8f8f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:        #1e1e1e;
-    --bg-alt:    #2a2a2a;
-    --bg-row-hover: rgba(255,255,255,0.06);
-    --fg:        #e8eaed;
-    --fg-dim:    #9aa0a6;
-    --fg-faint:  #6e7177;
-    --border:    #3c4043;
-    --border-strong: #5f6368;
+    --bg:              #0a0a0a;
+    --bg-alt:          #111111;
+    --bg-row-hover:    rgba(255, 255, 255, 0.04);
+    --fg:              #ededed;
+    --fg-dim:          #a1a1a1;
+    --fg-faint:        #737373;
+    --border:          #262626;
+    --border-strong:   #404040;
 
-    --prompt:    #8ab4f8;
-    --user:      #e8eaed;
-    --assistant: #e8eaed;
-    --tool:      #c58af9;
-    --info:      #8ab4f8;
-    --ok:        #81c995;
-    --warn:      #fdd663;
-    --err:       #f28b82;
-    --err-bg:    rgba(242, 139, 130, 0.15);
-    --warn-bg:   rgba(253, 214, 99, 0.12);
-    --link:      #8ab4f8;
-    --selection: rgba(138, 180, 248, 0.35);
-    --kbd-bg:    #2d2e30;
-    --kbd-border:#5f6368;
-    --tool-card-bg: rgba(255,255,255,0.04);
-    --tool-card-border: #3c4043;
-    --reasoning: #9aa0a6;
+    --prompt:          #0070f3;
+    --user:            #ededed;
+    --assistant:       #ededed;
+    --tool:            #d8ccf1;
+    --info:            #3291ff;
+    --ok:              #10b981;
+    --warn:            #f5a623;
+    --err:             #f87171;
+    --err-bg:          rgba(248, 113, 113, 0.12);
+    --warn-bg:         #332400;
+    --link:            #3291ff;
+    --selection:       rgba(0, 112, 243, 0.35);
+    --kbd-bg:          #171717;
+    --kbd-border:      #262626;
+    --tool-card-bg:    #111111;
+    --tool-card-border:#262626;
+    --reasoning:       #737373;
   }
 }
 
@@ -86,20 +86,20 @@ html, body { background: var(--bg); color: var(--fg); }
 
 ::selection { background: var(--selection); color: var(--fg); }
 
-::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-/* ── Toolbar (mimics DevTools chrome) ───────────────────────────────────── */
+/* ── Toolbar ────────────────────────────────────────────────────────────── */
 
 #toolbar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 26px;
+  gap: 8px;
+  padding: 0 10px;
+  height: 32px;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
   font-size: 11px;
@@ -109,8 +109,8 @@ html, body { background: var(--bg); color: var(--fg); }
   overflow: hidden;
 }
 #toolbar .grow { flex: 1; }
-#toolbar .sep  { color: var(--fg-faint); }
-#brand { color: var(--info); font-weight: 600; }
+#toolbar .sep  { color: var(--border-strong); }
+#brand { color: var(--fg); font-weight: 600; letter-spacing: -0.2px; }
 #model, #page {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,17 +119,18 @@ html, body { background: var(--bg); color: var(--fg); }
 #page { color: var(--fg-faint); }
 
 .btn {
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
   color: var(--fg-dim);
-  padding: 2px 8px;
-  border-radius: 3px;
+  padding: 3px 9px;
+  border-radius: 6px;
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-  height: 20px;
+  height: 22px;
+  transition: all 0.12s ease;
 }
-.btn:hover { background: var(--bg-row-hover); color: var(--fg); border-color: var(--border); }
+.btn:hover { background: var(--bg-row-hover); color: var(--fg); border-color: var(--fg-faint); }
 .btn:active { background: var(--border); }
 
 /* ── Log area ───────────────────────────────────────────────────────────── */
@@ -138,131 +139,119 @@ html, body { background: var(--bg); color: var(--fg); }
   flex: 1;
   overflow-y: scroll;
   overflow-x: hidden;
-  padding: 2px 0 6px;
+  padding: 4px 0 8px;
   outline: none;
   scroll-behavior: auto;
 }
 
-/* Each row mimics DevTools console row layout: gutter (16px) + body */
 .row {
   display: flex;
   align-items: flex-start;
-  padding: 1px 8px 1px 0;
-  min-height: 18px;
-  border-left: 2px solid transparent;
+  padding: 2px 10px 2px 0;
+  min-height: 20px;
+  position: relative;
+  word-break: break-word;
 }
 .row:hover { background: var(--bg-row-hover); }
 
-.row .glyph {
+.gutter {
+  width: 22px;
   flex-shrink: 0;
-  width: 14px;
-  text-align: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 1px;
   color: var(--fg-faint);
   user-select: none;
-  font-size: 11px;
-  line-height: 18px;
-  margin-left: 2px;
 }
-.row .body {
+.glyph { font-size: 11px; line-height: 1.45; }
+
+.body {
   flex: 1;
   min-width: 0;
-  padding-left: 4px;
   white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--fg);
 }
 
-/* Role variants */
-.row.user .glyph    { color: var(--prompt); font-weight: 600; }
-.row.user .body     { color: var(--user); }
-.row.assistant .glyph { color: var(--info); }
-.row.assistant .body  { color: var(--assistant); }
-.row.tool .glyph    { color: var(--tool); }
-.row.tool .body     { color: var(--tool); }
-.row.info .body, .row.info .glyph { color: var(--fg-dim); }
-.row.ok   .body, .row.ok   .glyph { color: var(--ok); }
-.row.warn .body, .row.warn .glyph { color: var(--warn); }
-.row.warn { background: var(--warn-bg); border-left-color: var(--warn); }
-.row.err  .body, .row.err  .glyph { color: var(--err); }
-.row.err  { background: var(--err-bg); border-left-color: var(--err); }
-.row.dim  .body, .row.dim  .glyph { color: var(--fg-faint); }
-.row.banner .body { color: var(--info); }
-
-/* Streaming caret on the live assistant row */
-.row.assistant.streaming .body::after {
-  content: '▍';
-  color: var(--info);
-  animation: blink 1s step-end infinite;
-  margin-left: 1px;
+.time {
+  flex-shrink: 0;
+  color: var(--fg-faint);
+  font-size: 10px;
+  margin-left: 8px;
+  user-select: none;
+  opacity: 0.8;
 }
-@keyframes blink { 50% { opacity: 0; } }
 
-/* Tool-call card (collapsed/expanded like DevTools group) */
+/* Row role styles */
+.row.user { color: var(--user); font-weight: 500; }
+.row.user .glyph { color: var(--prompt); }
+.row.assistant { color: var(--assistant); }
+.row.system { color: var(--fg-dim); }
+.row.system .glyph { color: var(--info); }
+.row.error { background: var(--err-bg); color: var(--err); }
+.row.error .glyph { color: var(--err); }
+.row.warn { background: var(--warn-bg); color: var(--warn); }
+.row.warn .glyph { color: var(--warn); }
+
+/* Tool cards */
 .tool-card {
-  display: inline-block;
-  margin: 1px 0;
-  padding: 1px 6px;
+  margin: 4px 0 6px 22px;
   border: 1px solid var(--tool-card-border);
+  border-radius: 6px;
   background: var(--tool-card-bg);
-  border-radius: 3px;
+  padding: 6px 10px;
   font-size: 11px;
+}
+.tool-card .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
   color: var(--tool);
 }
-.tool-card.ok    { border-left: 2px solid var(--ok); }
-.tool-card.bad   { border-left: 2px solid var(--err); }
-.tool-card .name { font-weight: 600; }
-.tool-card .meta { color: var(--fg-faint); margin-left: 6px; }
+.tool-card .args { color: var(--fg-dim); margin-top: 2px; }
+.tool-card .result { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); color: var(--fg); }
 
-/* Reasoning (italic gray, like DevTools secondary) */
-.row.reasoning .body { color: var(--reasoning); font-style: italic; }
-
-/* Code / inline keys */
-kbd {
-  font-family: inherit;
-  font-size: 10px;
-  padding: 1px 4px;
-  background: var(--kbd-bg);
-  border: 1px solid var(--kbd-border);
-  border-radius: 3px;
-  color: var(--fg-dim);
-}
-
-/* ── Prompt row (the active "›" line at the bottom) ─────────────────────── */
+/* ── Prompt row ─────────────────────────────────────────────────────────── */
 
 #prompt-row {
   flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
-  padding: 4px 8px 6px;
+  align-items: flex-end;
+  padding: 6px 10px 8px;
   border-top: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--bg-alt);
+  gap: 6px;
 }
+
 #prompt-glyph {
   color: var(--prompt);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 18px;
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-  margin-top: -1px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 22px;
   user-select: none;
+  padding-bottom: 1px;
 }
+
 #cmd {
   flex: 1;
-  background: transparent;
-  border: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   outline: 0;
   resize: none;
   color: var(--fg);
   font-family: inherit;
   font-size: 11px;
   line-height: 1.45;
-  padding: 1px 0 1px 4px;
+  padding: 4px 8px;
   margin: 0;
   max-height: 120px;
   overflow-y: auto;
   caret-color: var(--prompt);
+  transition: border-color 0.15s ease;
+}
+#cmd:focus {
+  border-color: var(--fg);
 }
 #cmd::placeholder { color: var(--fg-faint); }
 #cmd:disabled { opacity: 0.5; }
@@ -270,98 +259,98 @@ kbd {
 /* ── Theme override (via /theme) ────────────────────────────────────────── */
 
 html[data-theme="dark"] {
-  --bg:        #1e1e1e;
-  --bg-alt:    #2a2a2a;
-  --bg-row-hover: rgba(255,255,255,0.06);
-  --fg:        #e8eaed;
-  --fg-dim:    #9aa0a6;
-  --fg-faint:  #6e7177;
-  --border:    #3c4043;
-  --border-strong: #5f6368;
-  --prompt:    #8ab4f8;
-  --user:      #e8eaed;
-  --assistant: #e8eaed;
-  --tool:      #c58af9;
-  --info:      #8ab4f8;
-  --ok:        #81c995;
-  --warn:      #fdd663;
-  --err:       #f28b82;
-  --err-bg:    rgba(242, 139, 130, 0.15);
-  --warn-bg:   rgba(253, 214, 99, 0.12);
-  --link:      #8ab4f8;
-  --selection: rgba(138, 180, 248, 0.35);
-  --kbd-bg:    #2d2e30;
-  --kbd-border:#5f6368;
-  --tool-card-bg: rgba(255,255,255,0.04);
-  --tool-card-border: #3c4043;
-  --reasoning: #9aa0a6;
+  --bg:              #0a0a0a;
+  --bg-alt:          #111111;
+  --bg-row-hover:    rgba(255, 255, 255, 0.04);
+  --fg:              #ededed;
+  --fg-dim:          #a1a1a1;
+  --fg-faint:        #737373;
+  --border:          #262626;
+  --border-strong:   #404040;
+
+  --prompt:          #0070f3;
+  --user:            #ededed;
+  --assistant:       #ededed;
+  --tool:            #d8ccf1;
+  --info:            #3291ff;
+  --ok:              #10b981;
+  --warn:            #f5a623;
+  --err:             #f87171;
+  --err-bg:          rgba(248, 113, 113, 0.12);
+  --warn-bg:         #332400;
+  --link:            #3291ff;
+  --selection:       rgba(0, 112, 243, 0.35);
+  --kbd-bg:          #171717;
+  --kbd-border:      #262626;
+  --tool-card-bg:    #111111;
+  --tool-card-border:#262626;
+  --reasoning:       #737373;
 }
 html[data-theme="light"] {
-  --bg:        #ffffff;
-  --bg-alt:    #f3f3f3;
-  --bg-row-hover: rgba(0,0,0,0.05);
-  --fg:        #202124;
-  --fg-dim:    #5f6368;
-  --fg-faint:  #9aa0a6;
-  --border:    #d0d0d0;
-  --border-strong: #b8b8b8;
-  --prompt:    #1a73e8;
-  --user:      #202124;
-  --assistant: #202124;
-  --tool:      #8430ce;
-  --info:      #0b57d0;
-  --ok:        #1e7e34;
-  --warn:      #b06000;
-  --err:       #c5221f;
-  --err-bg:    #fce8e6;
-  --warn-bg:   #fff8c5;
-  --link:      #1a73e8;
-  --selection: #b3d4fc;
-  --kbd-bg:    #f5f5f5;
-  --kbd-border:#dadce0;
-  --tool-card-bg: #f7f7f9;
-  --tool-card-border: #e0e0e0;
-  --reasoning: #5f6368;
+  --bg:              #fafafa;
+  --bg-alt:          #ffffff;
+  --bg-row-hover:    rgba(0, 0, 0, 0.03);
+  --fg:              #171717;
+  --fg-dim:          #4d4d4d;
+  --fg-faint:        #8f8f8f;
+  --border:          #ebebeb;
+  --border-strong:   #d4d4d4;
+
+  --prompt:          #0070f3;
+  --user:            #171717;
+  --assistant:       #171717;
+  --tool:            #7928ca;
+  --info:            #0070f3;
+  --ok:              #10b981;
+  --warn:            #f5a623;
+  --err:             #ee0000;
+  --err-bg:          rgba(238, 0, 0, 0.05);
+  --warn-bg:         #ffefcf;
+  --link:            #0070f3;
+  --selection:       rgba(0, 112, 243, 0.15);
+  --kbd-bg:          #f2f2f2;
+  --kbd-border:      #ebebeb;
+  --tool-card-bg:    #ffffff;
+  --tool-card-border:#ebebeb;
+  --reasoning:       #8f8f8f;
 }
 
 /* ── Autocomplete dropdown ──────────────────────────────────────────────── */
 
 #ac {
   position: absolute;
-  bottom: 32px; /* sits just above the prompt row */
-  left: 16px;
+  bottom: 38px;
+  left: 14px;
   min-width: 320px;
-  max-width: 60%;
+  max-width: 65%;
   max-height: 200px;
   overflow-y: auto;
   background: var(--bg-alt);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 10;
   font-size: 11px;
 }
 #ac.hidden { display: none; }
 .ac-item {
   display: flex;
-  padding: 3px 8px;
+  padding: 5px 10px;
   cursor: pointer;
   color: var(--fg);
   white-space: nowrap;
   align-items: baseline;
+  transition: background 0.08s ease;
 }
-.ac-item .name { color: var(--prompt); width: 110px; flex-shrink: 0; }
+.ac-item .name { color: var(--prompt); width: 110px; flex-shrink: 0; font-weight: 500; }
 .ac-item .desc { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
 .ac-item.sel  { background: var(--bg-row-hover); }
 
-/* Clickable rows (model picker, tabs list, sessions list) */
 .row.clickable { cursor: pointer; }
 .row.clickable:hover { background: var(--bg-row-hover); }
 .row.clickable:hover .body { color: var(--fg); }
 
-/* When busy, dim the glyph */
 #prompt-row.busy #prompt-glyph {
   color: var(--warn);
   animation: blink 1s step-end infinite;
 }
-

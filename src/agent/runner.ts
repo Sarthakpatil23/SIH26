@@ -24,6 +24,13 @@ import type {
 } from '../protocol.js';
 import { PROTOCOL_VERSION } from '../protocol.js';
 import type { WSMessage } from '../types.js';
+import {
+  loadProvidersStore,
+  saveProvider,
+  deleteProvider,
+  setActiveProvider,
+} from './providers-store.js';
+import { testProviderConnection } from './openai-provider.js';
 
 interface SessionState {
   id: string;
@@ -227,6 +234,65 @@ export class Runner {
         s?.extContext?.handleCdpEvent(msg);
         return;
       }
+
+      case 'provider.list': {
+        const store = loadProvidersStore();
+        transport.send({
+          type: 'provider.list.result',
+          activeProviderId: store.activeProviderId,
+          providers: store.providers,
+        });
+        return;
+      }
+
+      case 'provider.save': {
+        saveProvider(msg.provider);
+        const store = loadProvidersStore();
+        transport.send({
+          type: 'provider.list.result',
+          activeProviderId: store.activeProviderId,
+          providers: store.providers,
+        });
+        return;
+      }
+
+      case 'provider.delete': {
+        deleteProvider(msg.id);
+        const store = loadProvidersStore();
+        transport.send({
+          type: 'provider.list.result',
+          activeProviderId: store.activeProviderId,
+          providers: store.providers,
+        });
+        return;
+      }
+
+      case 'provider.setActive': {
+        setActiveProvider(msg.id);
+        const store = loadProvidersStore();
+        transport.send({
+          type: 'provider.list.result',
+          activeProviderId: store.activeProviderId,
+          providers: store.providers,
+        });
+        this.agent.listModels().then((models) => {
+          try { transport.send({ type: 'models.list', models }); } catch {}
+          try { transport.send({ type: 'models.current', id: this.agent.getModel() }); } catch {}
+        });
+        return;
+      }
+
+      case 'provider.test': {
+        const res = await testProviderConnection(msg.provider);
+        transport.send({
+          type: 'provider.test.result',
+          providerId: msg.provider.id,
+          ok: res.ok,
+          error: res.error,
+          models: res.models,
+        });
+        return;
+      }
     }
   }
 
@@ -278,11 +344,14 @@ export class Runner {
       transport.send({ type: 'sdk.ready', ok: this.sdkReady.ok, detail: this.sdkReady.detail });
     }
     transport.send({ type: 'models.current', id: this.agent.getModel() });
-    // Only fetch models once the SDK is actually up. Before that listModels()
-    // either returns [] or resolves at the same moment as the post-init
-    // broadcast, which produced two identical models.list payloads on every
-    // cold start.
-    if (!this.sdkReady) return;
+    const store = loadProvidersStore();
+    transport.send({
+      type: 'provider.list.result',
+      activeProviderId: store.activeProviderId,
+      providers: store.providers,
+    });
+    // Only fetch models once the SDK is actually up (or if custom provider is active).
+    if (!this.sdkReady && !store.activeProviderId) return;
     this.agent.listModels().then((models) => {
       try { transport.send({ type: 'models.list', models }); } catch {}
     }).catch(() => {});

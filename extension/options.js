@@ -169,10 +169,11 @@ function onMsg(m) {
     send({ type: 'session.start', sessionId: SESSION_ID, capabilities: [] });
     // And ask explicitly in case we missed the initial push.
     send({ type: 'models.list' });
+    send({ type: 'provider.list' });
     return;
   }
   if (m.type === '__host_disconnected' || m.type === '__host_error' || m.type === '__host_missing') {
-    setHost('offline — make sure the browy backend is installed and running', 'err');
+    setHost('offline — make sure the shinscan backend is installed and running', 'err');
     return;
   }
 
@@ -199,9 +200,32 @@ function onMsg(m) {
     renderModels();
     return;
   }
+  if (m.type === 'provider.list.result') {
+    renderActiveProvider(m.providers, m.activeProviderId);
+    return;
+  }
   if (m.type === 'chat.error' && m.code === 'auth') {
     setAuth('unauth', m.message);
     return;
+  }
+}
+
+function renderActiveProvider(providers, activeId) {
+  const lbl = $('activeProviderLabel');
+  const dtl = $('activeProviderDetail');
+  if (!lbl || !dtl) return;
+  if (!activeId) {
+    lbl.textContent = 'Copilot SDK (Default)';
+    dtl.textContent = 'Standard GitHub Copilot routing';
+    return;
+  }
+  const active = (providers || []).find(p => p.id === activeId);
+  if (active) {
+    lbl.textContent = `${active.name} (${active.model})`;
+    dtl.textContent = `${active.baseUrl} · Active custom provider`;
+  } else {
+    lbl.textContent = 'Copilot SDK (Default)';
+    dtl.textContent = 'Standard GitHub Copilot routing';
   }
 }
 
@@ -447,4 +471,21 @@ if (toolEnableAllEl) {
 
 extId.textContent = chrome.runtime.id;
 loadToolPrefs().then(renderTools);
+
+try {
+  chrome.storage?.local?.get('browy_providers_store', (res) => {
+    const store = res?.browy_providers_store;
+    if (store) {
+      renderActiveProvider(store.providers, store.activeProviderId);
+    }
+  });
+
+  chrome.storage?.onChanged?.addListener((changes, area) => {
+    if (area === 'local' && changes.browy_providers_store?.newValue) {
+      const store = changes.browy_providers_store.newValue;
+      renderActiveProvider(store.providers, store.activeProviderId);
+    }
+  });
+} catch {}
+
 connect();

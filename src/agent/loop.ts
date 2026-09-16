@@ -1,10 +1,16 @@
 import type { Config, ToolCallRecord, WSMessage, CdpEndpoint } from '../types.js';
 import { getAllTools, type BrowserToolContext } from './tools/browser.js';
-import { ensureSnapshot, serializeSnapshot } from './page-snapshot.js';
+import { ensureSnapshot, serializeSnapshot, type PageSnapshot } from './page-snapshot.js';
 import { chromium, type Browser, type CDPSession, type Page } from 'playwright-core';
 import os from 'os';
 import path from 'path';
 import { getForegroundInfo, brandFromProcessName, stripBrowserSuffix, shutdownForeground } from './foreground.js';
+import { getActiveProvider } from './providers-store.js';
+import { executeCustomProviderTurn } from './openai-provider.js';
+import {
+  evaluateDomSufficiency, captureVisionFrame, formatVisionContextBlock,
+  type VisionFrame,
+} from './vision-fallback.js';
 
 // Copilot SDK is CJS — use require
 import { createRequire } from 'module';
@@ -62,7 +68,7 @@ function isBrowySession(s: any): boolean {
 function cleanChatSummary(s: string | undefined): string | undefined {
   if (!s) return s;
   let out = s;
-  const tags = ['browser_context', 'page_snapshot', 'recent_actions', 'page_stats', 'page_info'];
+  const tags = ['browser_context', 'page_snapshot', 'recent_actions', 'page_stats', 'page_info', 'vision_context', 'dom_sufficiency'];
   // 1. Strip closed pairs.
   for (const t of tags) {
     out = out.replace(new RegExp(`<${t}>[\\s\\S]*?</${t}>`, 'g'), '');
@@ -78,10 +84,10 @@ function cleanChatSummary(s: string | undefined): string | undefined {
   return out;
 }
 
-const SYSTEM_PROMPT = `You are Browy — a browser-automation copilot that lives inside the user's browser as a side-panel extension. The user can drag you around as a small pixel mascot, type questions in the side panel, and watch you drive their real tabs in real time.
+const SYSTEM_PROMPT = `You are Shinscan — a browser-automation copilot that lives inside the user's browser as a side-panel extension. The user can drag you around as a small pixel mascot, type questions in the side panel, and watch you drive their real tabs in real time.
 
 # IDENTITY — this is not optional
-- Your name is **Browy**. If the user asks "who are you", "what are you", "what model is this", "what's your name", or anything similar, the answer is always: **"I'm Browy — a browser-automation copilot. I drive your tabs from a side panel using indexed snapshots and CDP."** Do NOT mention Copilot, Claude, GPT, OpenAI, Anthropic, GitHub, or any underlying model — the user picks a model in settings, but to them you are Browy regardless of which engine is running underneath. You may say "you can switch the underlying model in settings" if pressed about the model.
+- Your name is **Shinscan**. If the user asks "who are you", "what are you", "what model is this", "what's your name", or anything similar, the answer is always: **"I'm Shinscan — a browser-automation copilot. I drive your tabs from a side panel using indexed snapshots and CDP."** Do NOT mention Copilot, Claude, GPT, OpenAI, Anthropic, GitHub, or any underlying model — the user picks a model in settings, but to them you are Shinscan regardless of which engine is running underneath. You may say "you can switch the underlying model in settings" if pressed about the model.
 - Aesthetic: retro pixel-art mascot, terminal-green on dark, JetBrains Mono. Tone: concise, helpful, low-ceremony, slightly playful. Never roleplay as a different assistant. Never break character.
 - You are not "the browser" — you operate it on the user's behalf. Their cookies, sessions, downloads, and history are real. Treat destructive actions (closing tabs, clearing storage, submitting forms) carefully.
 
@@ -117,6 +123,12 @@ const SYSTEM_PROMPT = `You are Browy — a browser-automation copilot that lives
 - \`upload_index(index, path)\` — file input by index, bypasses OS file dialog.
 - \`submit_form(index?)\` — clicks the form's submit button (or falls back to requestSubmit). Returns urlChanged for verification.
 - \`press_keys(keys)\` — combos like "Ctrl+Enter", "Tab", "Escape" (use after focus_index / type_index).
+
+**Visual & Coordinate tools (for Canvas, Spreadsheets, Figma, Games, or when DOM is inaccessible):**
+- \`look_at_screen\` — capture a fresh visual screenshot of the viewport and update visual context. Use when you cannot find a target in the DOM snapshot.
+- \`click_coordinate(x, y, clickCount?, button?)\` — click exact pixel coordinates (e.g. Google Sheets cells, Figma canvas, interactive charts, custom canvas buttons).
+- \`type_coordinate(x, y, text, clear?, pressEnter?)\` — click (x, y) to focus, type text, and optionally press Enter. Built specifically for spreadsheet cells (e.g. typing "hi" in cell A1) and canvas inputs.
+- \`drag_coordinate(fromX, fromY, toX, toY)\` — smooth drag between coordinates.
 
 **Page state (when you need data, not interaction):**
 - \`extract_text\` — visible text of page or selector.
@@ -173,6 +185,11 @@ const SYSTEM_PROMPT = `You are Browy — a browser-automation copilot that lives
 17. **SPA state-change loop — read the click result first.** \`click_index\` and \`type_index\` return verification flags: \`urlChanged\`, \`titleChanged\`, \`domChanged\` (visible-text shifted), \`modalAppeared\` / \`modalClosed\`, \`elementStateChanged\` (aria-pressed/expanded/selected/checked flipped). If ANY are true, the action took effect — proceed (call \`inspect_page\` only if you need fresh indices). If ALL are false, the click was a no-op: an overlay intercepted it, the element was disabled, or the SPA is still rendering. Read the tool's \`hint\` field, then \`wait_for\` for an expected post-state element, \`scroll\` if new content might be below the fold, or pick a different element. After two failed retries on the same element, switch strategy (different element, \`evaluate_js\` to read framework state directly, or \`await_user\` if it looks like an auth/permission gate).
 18. **Virtualized lists drop their DOM as you scroll.** LinkedIn feed, Twitter/X timeline, Discord channel, Slack thread, infinite-scroll search results — these unmount items once they leave the viewport. If the user wants data from a list longer than one screen, capture-as-you-go: \`inspect_page\` → extract the visible items → \`save_file('feed-page-N.json', JSON.stringify(items))\` → \`scroll('down')\` → repeat. Do NOT scroll all the way down then try to query at the end; the early items are gone. Stop when the snapshot shows no new items after a scroll, or a well-known sentinel ("End of feed", "No more posts") appears.
 19. **Modals and overlays close via X / Escape, not backdrop clicks.** Most SPA modals (Google Docs share dialog, LinkedIn message composer, Discord settings, Notion menus) ignore clicks on the backdrop or on elements behind the modal — those clicks reach the underlay but don't dismiss the overlay. To close: \`inspect_page\`, find the modal's close button (X icon, "Cancel", "Done"), \`click_index\` it; or \`press_key('Escape')\` for menus and lightboxes. If a click at the page level isn't doing anything, suspect an invisible overlay is intercepting events — check the snapshot for a modal/drawer element near the top of the z-stack.
+20. **DOM-First, Vision-Fallback Architecture (Universal):**
+    - **Always attempt DOM first:** For standard HTML pages (GitHub, Reddit, Wikipedia, forms, blogs, search engines), interact through DOM indexed tools (\`click_index\`, \`type_index\`, \`select_index\`). It is faster, deterministic, and highly structured.
+    - **Dynamic Vision Fallback:** If the page content is rendered on a \`<canvas>\` (e.g. Google Sheets grid, Figma artboards, Canva, WebGL), or the target element cannot be found in the DOM snapshot, or a DOM action has no observable effect, automatically switch to Vision.
+    - **Combine Context:** On hybrid pages (like Google Sheets), combine both: use DOM indices \`[N]\` for top menus ("File", "Insert", "Format") and formula inputs, and use \`type_coordinate\` / \`click_coordinate\` for the grid cells (e.g. cell A1).
+    - **Coordinate System:** Coordinates are in viewport pixels where \`(0, 0)\` is top-left and \`(vw, vh)\` is bottom-right. When \`<vision_context>\` is present, inspect the image to locate visual coordinates.
 
 # OUTPUT STYLE
 - Default to short, direct answers. Show only the result the user asked for; don't narrate every tool call.
@@ -476,12 +493,15 @@ export class Agent {
       const models = await this.copilotClient.listModels();
       const ids: string[] = (models || []).map((m: any) => m.id);
       if (ids.length && !ids.includes(this.config.model)) {
-        const preferred = ids.find(id => /claude-sonnet-4\.?5/i.test(id))
-                       || ids.find(id => /claude-sonnet/i.test(id))
-                       || ids.find(id => /^gpt-5/i.test(id))
-                       || ids[0];
-        console.log(`  ⚠ configured model "${this.config.model}" not available; using "${preferred}"`);
-        this.config.model = preferred;
+        const activeProv = getActiveProvider();
+        if (!activeProv) {
+          const preferred = ids.find(id => /claude-sonnet-4\.?5/i.test(id))
+                         || ids.find(id => /claude-sonnet/i.test(id))
+                         || ids.find(id => /^gpt-5/i.test(id))
+                         || ids[0];
+          console.log(`  ⚠ configured model "${this.config.model}" not available; using "${preferred}"`);
+          this.config.model = preferred;
+        }
       }
     } catch { /* listModels can fail pre-auth — leave config as-is */ }
     // One-shot prune of old Browy sessions on startup. Sessions accumulate
@@ -761,6 +781,8 @@ export class Agent {
       }
     }
 
+    const copilotModel = safeCopilotModel(this.config.model);
+
     // Try to resume an existing on-disk session for this Browy id. This is
     // what makes "reload the side panel and pick up where I left off" work.
     if (wantId) {
@@ -768,7 +790,7 @@ export class Agent {
         this.copilotSession = await this.copilotClient.resumeSession(wantId, {
           clientName: BROWSERAGENT_CLIENT_NAME,
           workingDirectory: BROWSERAGENT_WORKDIR,
-          model: this.config.model,
+          ...(copilotModel ? { model: copilotModel } : {}),
           tools: filteredTools,
           availableTools: allowedToolNames,
           onPermissionRequest: approveAll,
@@ -787,7 +809,7 @@ export class Agent {
       clientName: BROWSERAGENT_CLIENT_NAME,
       workingDirectory: BROWSERAGENT_WORKDIR,
       systemPrompt: SYSTEM_PROMPT,
-      model: this.config.model,
+      ...(copilotModel ? { model: copilotModel } : {}),
       tools: filteredTools,
       availableTools: allowedToolNames,
       onPermissionRequest: approveAll,
@@ -795,9 +817,12 @@ export class Agent {
   }
 
   async chat(userText: string): Promise<{ text: string; toolCalls: ToolCallRecord[] }> {
-    await this.whenCopilotReady();
-    if (!this.copilotClient) {
-      throw new Error('Copilot SDK is not initialised yet — try again in a moment, or run /signin if this persists.');
+    const activeProvider = getActiveProvider();
+    if (!activeProvider) {
+      await this.whenCopilotReady();
+      if (!this.copilotClient) {
+        throw new Error('Copilot SDK is not initialised yet — try again in a moment, or run /signin if this persists.');
+      }
     }
     await this.detectFocusedTab();
     await this.refreshTabInfo();
@@ -819,7 +844,9 @@ export class Agent {
     this.emit({ type: 'status', status: 'thinking' });
 
     try {
-      await this.ensureSession();
+      if (!activeProvider) {
+        await this.ensureSession();
+      }
       // Genuine activity — drop any preview pin so this chat legitimately
       // floats back to the top of the list.
       if (this.browyProtocolSessionId) this.previewTimePins.delete(this.browyProtocolSessionId);
@@ -849,18 +876,37 @@ export class Agent {
       // elements with data-browy-id so click_index/type_index can resolve.
       // Skipped on chrome:// and similar non-DOM tabs.
       let snapshotBlock = '';
+      let pageSnap: PageSnapshot | null = null;
       const url = ctx.url || '';
       const isInteractivePage = url && !/^(chrome|edge|brave|about|chrome-extension):/i.test(url);
       if (cdpForCtx && isInteractivePage) {
         try {
-          const snap = await ensureSnapshot(cdpForCtx, 0); // always fresh on user turn
-          snapshotBlock = `\n<page_snapshot>\n${serializeSnapshot(snap)}\n</page_snapshot>`;
+          pageSnap = await ensureSnapshot(cdpForCtx, 0); // always fresh on user turn
+          snapshotBlock = `\n<page_snapshot>\n${serializeSnapshot(pageSnap)}\n</page_snapshot>`;
         } catch { /* fail-soft: agent can still call inspect_page */ }
+      }
+
+      // ── DOM-First, Vision-Fallback Dynamic Evaluation ───────────────────────
+      const visionDecision = evaluateDomSufficiency(pageSnap, userText, this.recentActions);
+      let visionContextBlock = '';
+      let visionFrame: VisionFrame | null = null;
+      if (visionDecision.useVision && cdpForCtx && isInteractivePage) {
+        try {
+          visionFrame = await captureVisionFrame(cdpForCtx);
+          if (visionFrame) {
+            visionContextBlock = `\n${formatVisionContextBlock(visionFrame, visionDecision)}\n`;
+            this.emit({
+              type: 'activity',
+              event: 'vision_fallback_triggered',
+              result: visionDecision.reason,
+            });
+          }
+        } catch { /* fail-soft */ }
       }
 
       const recentBlock = this.serializeRecentActions();
       const contextBlock = contextLines.length
-        ? `<browser_context>\n${contextLines.join('\n')}\n</browser_context>${snapshotBlock}\n${recentBlock}\n`
+        ? `<browser_context>\n${contextLines.join('\n')}\n</browser_context>${snapshotBlock}${visionContextBlock}\n${recentBlock}\n`
         : recentBlock ? `${recentBlock}\n` : '';
       // Put the user's actual text FIRST so the SDK's session-summary (which
       // truncates to ~100 chars) captures the user's intent rather than our
@@ -868,6 +914,26 @@ export class Agent {
       const prompt = contextBlock
         ? `${userText}\n\n${contextBlock}`
         : userText;
+
+      // ── Custom provider route (OmniRoute, DeepSeek, OpenAI-compatible) ──
+      if (activeProvider) {
+        const browserCtx = this.getBrowserContext();
+
+        const result = await executeCustomProviderTurn({
+          config: activeProvider,
+          model: this.getModel(),
+          systemPrompt: SYSTEM_PROMPT,
+          prompt,
+          tools: getAllTools(),
+          disabledTools: this.disabledTools,
+          browserContext: browserCtx,
+          visionFrame,
+          emit: (msg) => this.emit(msg),
+        });
+
+        this.emit({ type: 'status', status: 'idle' });
+        return result;
+      }
 
       // ── Stream-based send ────────────────────────────────────────────
       // sendAndWait() has a hard 60s timeout that breaks multi-step tool
@@ -983,40 +1049,50 @@ export class Agent {
     return out;
   }
 
-  /** Current Copilot model id. */
+  /** Current model id (active custom provider or Copilot). */
   getModel(): string {
+    const activeProvider = getActiveProvider();
+    if (activeProvider) {
+      if (activeProvider.models.includes(this.config.model)) {
+        return this.config.model;
+      }
+      return activeProvider.defaultModel || activeProvider.models[0] || 'deepseek-chat';
+    }
     return this.config.model;
   }
 
-  /** Switch the Copilot model in-place when possible (preserving the session
-   *  history), otherwise fall back to recreating the session.
-   *  The Copilot SDK exposes `session.setModel(id)` since copilot-sdk 0.x; we
-   *  call it on the live session so a /model change keeps every prior turn. */
+  /** Switch the model in-place when possible. */
   async setModel(id: string): Promise<void> {
     if (!id || id === this.config.model) return;
     this.config.model = id;
-    // Persist the user's choice so it survives a host restart. Best-effort:
-    // savePrefs swallows its own errors and never throws.
     try {
       const { savePrefs } = await import('./prefs.js');
       savePrefs({ model: id });
     } catch {}
     if (this.copilotSession && typeof this.copilotSession.setModel === 'function') {
-      try {
-        await this.copilotSession.setModel(id);
-        return;
-      } catch (e) {
-        // Some models reject mid-session (e.g. provider mismatch). Fall through
-        // to a full rebuild so the user still gets the model they asked for.
-        console.warn(`  ⚠ session.setModel("${id}") failed; rebuilding session:`, (e as Error)?.message || e);
+      const copilotModel = safeCopilotModel(id);
+      if (copilotModel) {
+        try {
+          await this.copilotSession.setModel(copilotModel);
+          return;
+        } catch (e) {
+          console.warn(`  ⚠ session.setModel("${copilotModel}") failed; rebuilding session:`, (e as Error)?.message || e);
+        }
       }
     }
-    // No live session, no setModel support, or setModel threw → rebuild.
     await this.clearHistory();
   }
 
-  /** List models advertised by the Copilot SDK. */
+  /** List models advertised by the active provider or Copilot SDK. */
   async listModels(): Promise<import('../types.js').ModelOption[]> {
+    const activeProvider = getActiveProvider();
+    if (activeProvider) {
+      return (activeProvider.models || []).map((m) => ({
+        id: m,
+        name: m,
+        vendor: activeProvider.name,
+      }));
+    }
     await this.whenCopilotReady();
     if (!this.copilotClient) return [];
     try {
@@ -1360,3 +1436,19 @@ function mapEventsToMessages(events: any[]): Array<
   }
   return out;
 }
+
+function safeCopilotModel(model: string | undefined): string | undefined {
+  if (!model) return undefined;
+  if (
+    model.includes('/') ||
+    model.startsWith('deepseek') ||
+    model.startsWith('qwen') ||
+    model.startsWith('llama') ||
+    model.includes('auto') ||
+    model.startsWith('gemini')
+  ) {
+    return undefined; // lets Copilot SDK use its own default model
+  }
+  return model;
+}
+

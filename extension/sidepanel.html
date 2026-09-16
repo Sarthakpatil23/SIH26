@@ -3,402 +3,636 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Browy</title>
+  <title>Shinscan</title>
   <script src="marked.min.js"></script>
-  <!-- Google Fonts blocked by MV3 CSP; system mono stack instead. -->
-  <style>
-    :root { --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Menlo', monospace; }
-  </style>
   <style>
     /* ════════════════════════════════════════════════════════════════
-       BROWY — minimal pixel-art chat
-       Mascot does the emotional work. Everything else is invisible
-       until it earns its place on screen.
-       Animations: NO tweens. Discrete frame steps only. Pixel art rules.
+       BROWY — Vercel Geist Design System (per DESIGN.md)
+       Stark black-on-near-white developer-platform aesthetic where a
+       single ink tone carries every heading, CTA, and border, with a
+       multi-stop mesh gradient confined to the hero.
        ════════════════════════════════════════════════════════════════ */
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg:        #0d1310;
-      --solid:     #0d1310;                  /* fully opaque surface */
-      --solid-2:   #141a16;
-      /* No more transparency — Chrome's side-panel host shows white behind us
-         when translucent, which made the panel look light. Both vars now alias
-         the solid colors so we always render a stable dark surface. */
-      --translucent:    #0d1310;
-      --translucent-2:  #141a16;
-      --bub-u-bg:  #1c2620;
-      --line:      rgba(160, 180, 160, 0.10);
-      --line-2:    rgba(160, 180, 160, 0.16);
-      --ink:       #d8e3d8;
-      --ink-2:     #6e8276;
-      --green:     #4ade80;
-      --lime:      #c5f04b;
-      --err:       #f87171;
-      --mono:      'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+      /* Brand & Neutral Palette */
+      --primary:                 #171717;
+      --on-primary:              #ffffff;
+      --ink:                     #171717;
+      --body:                    #4d4d4d;
+      --mute:                    #8f8f8f;
+      --faint:                   #a1a1a1;
+      --hairline:                #ebebeb;
+      --hairline-soft:           #f2f2f2;
+      --canvas:                  #fafafa;
+      --canvas-elevated:         #ffffff;
+
+      /* Accents & Semantics */
+      --link:                    #0070f3;
+      --link-deep:               #0761d1;
+      --link-soft:               #d3e5ff;
+      --error:                   #ee0000;
+      --error-deep:              #c50000;
+      --warning:                 #f5a623;
+      --warning-soft:            #ffefcf;
+      --warning-deep:            #ab570a;
+      --violet:                  #7928ca;
+      --violet-soft:             #d8ccf1;
+      --cyan:                    #50e3c2;
+      --cyan-soft:               #aaffec;
+      --pink:                    #ff0080;
+      --magenta:                 #eb367f;
+
+      /* Brand Gradients (Develop / Preview / Ship) */
+      --gradient-develop-start:  #007cf0;
+      --gradient-develop-end:    #00dfd8;
+      --gradient-preview-start:  #7928ca;
+      --gradient-preview-end:    #ff0080;
+      --gradient-ship-start:     #ff4d4d;
+      --gradient-ship-end:       #f9cb28;
+
+      /* Legacy compatibility mappings */
+      --bg:                      var(--canvas);
+      --solid:                   var(--canvas);
+      --solid-2:                 var(--canvas-elevated);
+      --translucent:             var(--canvas);
+      --translucent-2:           var(--hairline-soft);
+      --bub-u-bg:                var(--primary);
+      --line:                    var(--hairline);
+      --line-2:                  var(--hairline);
+      --ink-2:                   var(--mute);
+      --green:                   #10b981;
+      --lime:                    var(--link);
+      --err:                     var(--error);
+      --acc:                     var(--link);
+
+      /* Typography */
+      --font-sans:               'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --font-mono:               'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --mono:                    var(--font-mono);
+
+      /* Border Radii */
+      --radius-none:             0px;
+      --radius-sm:               6px;
+      --radius-md:               12px;
+      --radius-lg:               16px;
+      --radius-pill-cat:         64px;
+      --radius-pill:             100px;
+      --radius-full:             9999px;
+
+      /* Shadows */
+      --shadow-whisper:          0px 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-card:             0px 1px 3px rgba(0, 0, 0, 0.04), 0px 1px 2px rgba(0, 0, 0, 0.02);
+      --shadow-floating:         0px 4px 16px rgba(0, 0, 0, 0.08), 0px 1px 2px rgba(0, 0, 0, 0.04);
     }
 
-    /* ──────────────────────────────────────────────────────────────
-       .opaque — semantic utility for any element whose contents
-       (text, icons, code) would be hurt by the panel's blur/alpha.
-       Apply this anywhere a human needs to *read* something.
-       Anything decorative/atmospheric stays transparent.
-       Keep this class flat — no padding/border so it composes cleanly.
-       ────────────────────────────────────────────────────────────── */
-    /* Single-state solid theme. Focus state is no longer used to toggle
-       background or blur — those caused the panel to look "white" when
-       Chrome's side-panel host showed through. */
-    .opaque, .opaque-raised { /* legacy no-op */ }
-
-    /* Always solid — no backdrop blur, no focus-based switching */
-    .panel {
-      background: var(--solid);
-      border-top: 1px solid var(--line);
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary:                 #ededed;
+        --on-primary:              #000000;
+        --ink:                     #ededed;
+        --body:                    #a1a1a1;
+        --mute:                    #737373;
+        --faint:                   #525252;
+        --hairline:                #262626;
+        --hairline-soft:           #171717;
+        --canvas:                  #0a0a0a;
+        --canvas-elevated:         #111111;
+        --link:                    #0070f3;
+        --link-deep:               #3291ff;
+        --link-soft:               #00254d;
+        --error:                   #f87171;
+        --error-deep:              #ef4444;
+        --warning:                 #f5a623;
+        --warning-soft:            #332400;
+        --warning-deep:            #fbbf24;
+        --bub-u-bg:                #222222;
+        --shadow-whisper:          0px 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-card:             0px 1px 3px rgba(0, 0, 0, 0.4);
+        --shadow-floating:         0px 4px 18px rgba(0, 0, 0, 0.6);
+      }
     }
-    .corner   { opacity: 1; }
-    .msgs     { opacity: 1; }
-    .inp-row  { background: var(--solid-2); border-top-color: var(--line); opacity: 1; }
-
-    /* MINIMIZED — chat collapses INTO the mascot (scales toward top-left).
-       DOM is preserved; this is purely a visual collapse. */
-    .titlebar, .infobar, .panel {
-      transition: opacity 0.22s steps(4), transform 0.22s steps(4);
-      transform-origin: 30px 24px;  /* anchor at mascot center for collapse-to-avatar feel */
-    }
-    body.minimized .titlebar,
-    body.minimized .infobar,
-    body.minimized .panel {
-      opacity: 0;
-      pointer-events: none;
-      transform: scale(0.04);
-    }
-    body.minimized .corner   { opacity: 0; pointer-events: none; }
-    body.minimized .app      { padding: 0; }
-    body.minimized .mascot   { top: 4px; left: 4px; }
-
 
     html, body {
-      font-family: var(--mono);
-      background: var(--solid);
+      font-family: var(--font-sans);
+      background: var(--canvas);
       color: var(--ink);
-      height: 100vh; width: 100vw;
+      height: 100vh;
+      width: 100vw;
       overflow: hidden;
-      font-size: 12px;
+      font-size: 13px;
+      line-height: 1.5;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       cursor: default;
       user-select: none;
-      image-rendering: pixelated;
-      image-rendering: -moz-crisp-edges;
     }
 
-    /* App: mascot perches at top-left, panel below ─────────────────── */
+    /* ── App Shell ─────────────────────────────────────────────────── */
     .app {
       position: relative;
-      height: 100vh; width: 100vw;
-      padding: 48px 0 0 0;  /* room for mascot above titlebar */
-      display: flex; flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      padding: 48px 0 0 0;
+      display: flex;
+      flex-direction: column;
       -webkit-app-region: drag;
-      background: var(--solid);
+      background: var(--canvas);
     }
 
-    /* ── Titlebar (top): controls + brand only ──────────────────────── */
+    /* ── Titlebar: Vercel nav-bar aesthetic ────────────────────────── */
     .titlebar {
       flex: 0 0 auto;
-      display: flex; align-items: stretch;
-      padding: 0;
-      border-bottom: 1px solid var(--line);
-      background: var(--translucent);
-      backdrop-filter: blur(20px) saturate(140%);
-      -webkit-backdrop-filter: blur(20px) saturate(140%);
-      -webkit-app-region: drag;
-      font-family: var(--mono);
-      user-select: none;
-      min-height: 38px;
-      transition: background 0.18s steps(3);
+      display: flex;
+      align-items: center;
+      padding: 0 8px 0 12px;
+      border-bottom: 1px solid var(--hairline);
+      background: var(--canvas-elevated);
+      font-family: var(--font-sans);
+      min-height: 42px;
+      z-index: 20;
     }
-    body.focused .titlebar { /* legacy no-op — titlebar is always solid now */ }
 
     .tb-brand-cell {
-      flex: 1; min-width: 0;
-      display: flex; align-items: center; gap: 8px;
-      padding: 0 10px 0 10px;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
+
     .tb-dot {
-      width: 8px; height: 8px; flex-shrink: 0;
-      background: var(--ink-2);
-      transition: background 0.15s steps(2);
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--mute);
+      flex-shrink: 0;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
     }
-    .tb-dot.live { background: var(--green); box-shadow: 0 0 4px var(--green); }
-    .tb-dot.busy { background: var(--lime); box-shadow: 0 0 6px var(--lime); animation: pulseDot 0.6s steps(2) infinite; }
-    .tb-dot.err  { background: var(--err);  box-shadow: 0 0 6px var(--err);  }
+    .tb-dot.live {
+      background: var(--link);
+      box-shadow: 0 0 8px rgba(0, 112, 243, 0.45);
+    }
+    .tb-dot.busy {
+      background: var(--link);
+      animation: pulseDot 0.8s ease infinite alternate;
+    }
+    .tb-dot.err {
+      background: var(--error);
+      box-shadow: 0 0 8px rgba(238, 0, 0, 0.45);
+    }
+    @keyframes pulseDot {
+      from { opacity: 0.35; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1.1); }
+    }
+
     .tb-brand {
-      color: var(--green); font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.08em;
-      font-size: 12px;
-    }
-    .tb-tag { color: var(--ink-2); font-size: 10px; opacity: 0.7; letter-spacing: 0.05em; }
-
-    /* Controls cluster — right side */
-    .tb-ctrls {
-      display: flex; align-items: stretch;
-      -webkit-app-region: no-drag;
-      border-left: 1px solid var(--line);
-    }
-    .tb-btn {
-      background: transparent; border: none;
-      color: var(--ink-2); cursor: pointer;
-      font-family: var(--mono); font-size: 16px; font-weight: 600;
-      padding: 0;
-      width: 38px; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      gap: 0;
+      color: var(--ink);
+      font-weight: 600;
+      letter-spacing: -0.4px;
+      font-size: 14px;
       line-height: 1;
-      border-left: 1px solid transparent;
-      transition: background 0.12s steps(2), color 0.12s steps(2);
     }
-    .tb-btn:hover { background: rgba(255,255,255,0.06); color: var(--ink); }
-    .tb-btn.danger:hover { background: rgba(248,113,113,0.16); color: var(--err); }
-    .tb-btn .lbl { font-size: 8.5px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.75; font-weight: 600; }
-    .tb-stop { display: none; color: var(--err); flex-direction: column; gap: 1px; font-size: 12px; }
-    .tb-stop.show { display: flex; }
-    .tb-btn.close-btn {}
-    .tb-btn#minBtn {}
-    .tb-btn#clearBtn {}
-    .tb-ico { width: 14px; height: 14px; display: block; }
-    .tb-btn.close-btn .tb-ico { width: 16px; height: 16px; }
 
-    /* ── Info bar (below titlebar): browser + tab + url ────────────── */
+    .tb-tag {
+      color: var(--mute);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Controls cluster */
+    .tb-ctrls {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      -webkit-app-region: no-drag;
+    }
+
+    .tb-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      color: var(--body);
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .tb-btn:hover {
+      background: var(--hairline-soft);
+      border-color: var(--hairline);
+      color: var(--ink);
+    }
+    .tb-btn:active {
+      background: var(--hairline);
+    }
+    .tb-btn.danger:hover {
+      background: rgba(238, 0, 0, 0.08);
+      border-color: rgba(238, 0, 0, 0.2);
+      color: var(--error);
+    }
+    .tb-btn .lbl {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .tb-stop {
+      display: none;
+      color: var(--error);
+      flex-direction: column;
+      gap: 1px;
+      font-size: 11px;
+    }
+    .tb-stop.show { display: flex; }
+    .tb-ico { width: 15px; height: 15px; display: block; stroke-width: 1.5; }
+
+    /* ── Infobar (secondary technical bar) ─────────────────────────── */
     .infobar {
       flex: 0 0 auto;
-      position: relative;       /* needed so z-index applies */
-      z-index: 50;              /* lift above .panel which creates its own stacking context via backdrop-filter */
-      display: flex; align-items: center; gap: 8px;
-      padding: 5px 10px;
-      border-bottom: 1px solid var(--line);
-      background: var(--translucent-2);
-      backdrop-filter: blur(20px) saturate(140%);
-      -webkit-backdrop-filter: blur(20px) saturate(140%);
-      -webkit-app-region: drag;
-      font-family: var(--mono); font-size: 10.5px;
-      color: var(--ink-2);
-      min-height: 26px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--hairline);
+      background: var(--canvas);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--body);
+      min-height: 28px;
       user-select: none;
-      transition: background 0.18s steps(3);
     }
-    body.focused .infobar { /* legacy no-op — infobar is always solid now */ }
 
-    /* Connection banner — appears only during reconnect cycle / fatal host loss */
+    .ib-browser {
+      color: var(--ink);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      font-size: 10px;
+      flex-shrink: 0;
+      padding: 2px 6px;
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+    }
+    .ib-tabs { color: var(--mute); flex-shrink: 0; font-size: 11px; }
+    .ib-sep { color: var(--hairline); flex-shrink: 0; font-weight: 300; }
+    .ib-ttl {
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ib-ttl.action { color: var(--link); font-weight: 500; font-family: var(--font-mono); }
+    .ib-host {
+      color: var(--mute);
+      font-size: 11px;
+      max-width: 130px;
+      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ib-browsers {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--mute);
+      padding: 2px 7px;
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-pill);
+      background: var(--canvas-elevated);
+      letter-spacing: 0.04em;
+    }
+    .ib-browsers .ib-bcount { color: var(--ink); font-weight: 600; }
+
+    /* ── Connection banner ─────────────────────────────────────────── */
     .conn-banner {
       flex: 0 0 auto;
       display: none;
       align-items: center;
       gap: 8px;
-      padding: 6px 10px;
-      font-family: var(--mono);
-      font-size: 10.5px;
-      letter-spacing: 0.04em;
-      border-bottom: 1px solid var(--line);
-      background: rgba(248, 113, 113, 0.10);
-      color: var(--err);
+      padding: 8px 12px;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      border-bottom: 1px solid rgba(238, 0, 0, 0.18);
+      background: rgba(238, 0, 0, 0.05);
+      color: var(--error);
     }
     .conn-banner.show { display: flex; }
-    .conn-banner.warn { background: rgba(250, 204, 21, 0.10); color: #facc15; }
-    .conn-banner .cb-spinner {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: currentColor; opacity: 0.5;
-      animation: cbpulse 0.8s steps(2) infinite;
+    .conn-banner.warn {
+      border-bottom-color: rgba(245, 166, 35, 0.25);
+      background: var(--warning-soft);
+      color: var(--warning-deep);
     }
-    @keyframes cbpulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.9; } }
-    .conn-banner a { color: inherit; text-decoration: underline; cursor: pointer; }
+    .conn-banner .cb-spinner {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulseDot 0.7s ease infinite alternate;
+    }
+    .conn-banner a { color: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
     .conn-banner .cb-spacer { flex: 1; }
 
-    .ib-browser {
-      color: var(--green); text-transform: uppercase; letter-spacing: 0.06em;
-      font-weight: 700; font-size: 10px;
-      flex-shrink: 0;
-      padding: 1px 5px;
-      border: 1px solid rgba(74,222,128,0.35);
-    }
-    .ib-tabs { color: var(--ink-2); flex-shrink: 0; font-size: 10px; opacity: 0.75; }
-    .ib-sep { color: var(--ink-2); opacity: 0.4; flex-shrink: 0; }
-    .ib-ttl {
-      color: var(--ink); flex: 1; min-width: 0;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .ib-ttl.action { color: var(--lime); font-weight: 600; }
-    .ib-host {
-      color: var(--ink-2); opacity: 0.6;
-      max-width: 130px; flex-shrink: 0;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-
-    /* ── Browser launcher button + popover ───────────────────────── */
-    .ib-browsers {
-      flex-shrink: 0;
-      display: inline-flex; align-items: center; gap: 2px;
-      font-family: var(--mono); font-size: 10px;
-      color: var(--ink-2);
-      padding: 1px 6px;
-      border: 1px solid var(--line);
-      background: rgba(255,255,255,0.04);
-      letter-spacing: 0.04em;
-      user-select: none;
-    }
-    .ib-browsers .ib-bcount { color: var(--green); font-weight: 700; }
-    .browser-pop {
-      position: fixed; z-index: 9999;
-      min-width: 220px;
-      background: var(--solid); border: 1px solid var(--line);
-      box-shadow: 0 6px 18px rgba(0,0,0,0.55);
-      padding: 6px;
-      display: none;
-      font-family: var(--mono); font-size: 11px;
-      -webkit-app-region: no-drag;
-      pointer-events: auto;
-    }
-    .browser-pop.open { display: block; }
-    .browser-pop * { -webkit-app-region: no-drag; }
-    .bp-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 6px;
-    }
-    .bp-row + .bp-row { border-top: 1px dashed var(--line); }
-    .bp-name { flex: 1; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-    .bp-status {
-      font-size: 9px; padding: 1px 5px;
-      border: 1px solid var(--line); color: var(--ink-2);
-      letter-spacing: 0.05em;
-    }
-    .bp-status.connected { color: var(--green); border-color: rgba(74,222,128,0.4); }
-    .bp-status.notinstalled { color: var(--ink-2); opacity: 0.5; }
-    .bp-launch {
-      font-family: var(--mono); font-size: 10px;
-      padding: 2px 7px; cursor: pointer;
-      background: var(--lime); color: #000; border: none;
-      letter-spacing: 0.05em; font-weight: 700;
-    }
-    .bp-launch:disabled { opacity: 0.35; cursor: not-allowed; background: var(--line); color: var(--ink-2); }
-    .bp-launch:hover:not(:disabled) { filter: brightness(1.15); }
-    .bp-msg {
-      padding: 6px; color: var(--ink-2); font-size: 10px;
-      border-top: 1px dashed var(--line); margin-top: 4px;
-      white-space: pre-wrap;
-    }
-    .bp-msg.err { color: #fca5a5; }
-    .bp-msg.ok { color: var(--green); }
-
-    /* Mascot — perches above the titlebar at top-left, doubles as drag handle.
-       NOTE: We use JS-based dragging (via winctl IPC) instead of -webkit-app-region:drag
-       because Electron's drag region overrides our cursor and swallows click events. */
+    /* ── Mascot (Hardware Companion) ───────────────────────────────── */
     .mascot {
       position: absolute;
-      top: 2px; left: 6px;
-      width: 56px; height: 56px;
+      top: 2px;
+      left: 8px;
+      width: 52px;
+      height: 52px;
       z-index: 30;
       -webkit-app-region: no-drag;
       cursor: grab;
-      transition: transform 0.18s steps(3);
+      transition: transform 0.18s ease;
     }
     .mascot:active { cursor: grabbing; }
     .mascot.dragging { cursor: grabbing; transition: none; }
     .mascot:hover { transform: translateY(-1px); }
-    .mascot svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; pointer-events: none; }
-    body.minimized .mascot { cursor: grab; }
-    body.minimized .mascot:active { cursor: grabbing; }
-    body.minimized .mascot:hover { transform: translateY(-2px) scale(1.05); }
-    /* (mascot pip removed — minimize is handled by titlebar button; restore by clicking avatar) */
+    .mascot svg { width: 100%; height: 100%; display: block; }
 
-    .panel-shell { display: contents; } /* unused — kept to avoid breaking older styles */
+    /* ── Main Panel Container ──────────────────────────────────────── */
     .panel {
-      flex: 1 1 auto; min-height: 0;
-      display: flex; flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
       position: relative;
-      -webkit-app-region: drag;
+      background: var(--canvas);
     }
 
-    @keyframes pulseDot { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.35; } }
-
-    /* Messages ─────────────────────────────────────────────────────── */
+    /* ── Message Stream ────────────────────────────────────────────── */
     .msgs {
       flex: 1;
-      padding: 14px 14px 12px 14px;
+      padding: 16px 14px;
       overflow-y: auto;
-      display: flex; flex-direction: column;
-      gap: 12px;
-      -webkit-app-region: drag;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
       user-select: text;
     }
-    .msgs > * { -webkit-app-region: no-drag; }   /* but not bubbles */
-    .msgs::-webkit-scrollbar { width: 4px; }
-    .msgs::-webkit-scrollbar-thumb { background: rgba(74,222,128,0.25); }
+    .msgs::-webkit-scrollbar { width: 6px; }
+    .msgs::-webkit-scrollbar-thumb {
+      background: var(--hairline);
+      border-radius: 3px;
+    }
     .msgs::-webkit-scrollbar-track { background: transparent; }
 
+    /* ── Hero / Empty State (Vercel Mesh Gradient) ─────────────────── */
+    .empty {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 32px 16px;
+      margin: auto 0;
+      overflow: hidden;
+      border-radius: var(--radius-lg);
+    }
+
+    /* Vercel multi-stop mesh gradient bloom */
+    .empty-mesh {
+      position: absolute;
+      inset: -40px;
+      background:
+        radial-gradient(ellipse 60% 40% at 50% 10%, rgba(0, 124, 240, 0.14) 0%, transparent 60%),
+        radial-gradient(circle 120px at 25% 45%, rgba(121, 40, 202, 0.12) 0%, transparent 70%),
+        radial-gradient(circle 130px at 75% 45%, rgba(255, 0, 128, 0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 30% at 50% 80%, rgba(249, 203, 40, 0.08) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(20px);
+    }
+
+    .empty-eyebrow {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 12px;
+    }
+    .empty-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--mute);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      box-shadow: var(--shadow-whisper);
+    }
+
+    .empty .greet {
+      position: relative;
+      z-index: 1;
+      font-family: var(--font-sans);
+      font-size: 34px;
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -1.3px;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+
+    .empty-desc {
+      position: relative;
+      z-index: 1;
+      font-size: 13px;
+      color: var(--body);
+      max-width: 280px;
+      line-height: 1.45;
+      margin-bottom: 8px;
+    }
+
+    .empty .hint {
+      position: relative;
+      z-index: 1;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--mute);
+      letter-spacing: 0.02em;
+      margin-bottom: 20px;
+    }
+
+    /* Suggestion Chips */
+    .empty-suggestions {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      max-width: 290px;
+    }
+    .sugg-chip {
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: var(--shadow-whisper);
+      transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+    }
+    .sugg-chip:hover {
+      border-color: var(--ink);
+      transform: translateY(-1px);
+    }
+    .sugg-icon {
+      font-size: 13px;
+      opacity: 0.75;
+    }
+
+    /* ── Chat Bubbles ──────────────────────────────────────────────── */
     .bub {
-      max-width: 92%;
-      font-size: 12px; line-height: 1.55;
+      max-width: 90%;
+      font-size: 13px;
+      line-height: 1.6;
       word-wrap: break-word;
     }
+
+    /* User Message: Vercel Ink Pill */
     .bub.u {
       align-self: flex-end;
-      background: var(--bub-u-bg);
-      color: var(--ink);
-      padding: 7px 10px;
-      border-left: 2px solid var(--green);
+      background: var(--primary);
+      color: var(--on-primary);
+      padding: 8px 14px;
+      border-radius: 16px 16px 4px 16px;
+      font-weight: 400;
+      box-shadow: var(--shadow-whisper);
     }
+
+    /* Assistant Message: Elevated Hairline Card */
     .bub.a {
       align-self: stretch;
       max-width: 100%;
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
       color: var(--ink);
-      padding: 8px 10px 8px 12px;
-      border-left: 2px solid var(--line-2);
+      box-shadow: var(--shadow-card);
     }
-    .bub.a p   { margin: 0 0 6px; }
+
+    .bub.a p { margin: 0 0 8px; }
     .bub.a p:last-child { margin: 0; }
-    .bub.a strong { color: var(--lime); font-weight: 600; }
-    .bub.a em     { color: var(--lime); font-style: normal; }
-    .bub.a code   { font-family: var(--mono); background: rgba(74,222,128,0.10); padding: 1px 5px; color: var(--lime); font-size: 11px; }
-    .bub.a pre    { background: rgba(0,0,0,0.30); padding: 8px 10px; margin: 6px 0; overflow-x: auto; border-left: 2px solid var(--green); }
-    .bub.a pre code { background: none; padding: 0; color: var(--ink); }
-    .bub.a ul, .bub.a ol { padding-left: 16px; margin: 4px 0; }
-    .bub.a a   { color: var(--lime); text-decoration: none; border-bottom: 1px dotted var(--lime); }
-    .bub.a .cursor {
-      display: inline-block; width: 6px; height: 12px;
-      background: var(--green); vertical-align: -2px; margin-left: 1px;
-      animation: blinkCursor 1s steps(2) infinite;
+    .bub.a strong { color: var(--ink); font-weight: 600; }
+    .bub.a em { font-style: italic; }
+    .bub.a code {
+      font-family: var(--font-mono);
+      background: var(--hairline-soft);
+      border: 1px solid var(--hairline);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--ink);
     }
-    @keyframes blinkCursor { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+    .bub.a pre {
+      background: var(--hairline-soft);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      margin: 8px 0;
+      overflow-x: auto;
+    }
+    .bub.a pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: var(--ink);
+      font-size: 12px;
+    }
+    .bub.a ul, .bub.a ol { padding-left: 18px; margin: 6px 0; }
+    .bub.a li { margin-bottom: 4px; }
+    .bub.a a {
+      color: var(--link);
+      text-decoration: none;
+      border-bottom: 1px solid var(--link-soft);
+      transition: border-color 0.15s ease, color 0.15s ease;
+    }
+    .bub.a a:hover {
+      color: var(--link-deep);
+      border-bottom-color: var(--link);
+    }
+    .bub.a .cursor {
+      display: inline-block;
+      width: 6px;
+      height: 14px;
+      background: var(--ink);
+      vertical-align: -2px;
+      margin-left: 2px;
+      animation: blinkCursor 0.9s steps(2) infinite;
+    }
+    @keyframes blinkCursor { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 
     .bub.a.err {
-      color: #fca5a5; border-left: 2px solid #f87171;
-      background: rgba(248,113,113,0.06);
+      color: var(--error);
+      background: rgba(238, 0, 0, 0.04);
+      border-color: rgba(238, 0, 0, 0.25);
     }
 
-    /* Tool steps — Claude-Code-style inline status lines.
-       Each step renders as one collapsed line; click to expand and see args. */
-    /* Tool calls — Claude Code / Copilot CLI style.
-       Each step is: ⏺ tool(args)              123ms
-                     ⎿ result preview / done summary
-       Colored bullet, monospace, hierarchical with arc-prefix on the result. */
-    .tool-steps { margin: 4px 0 6px; display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); }
-    .tool-step  {
-      font-size: 11px; color: var(--ink-2);
+    /* ── Tool Steps (Vercel Console Disclosure) ────────────────────── */
+    .tool-steps {
+      margin: 4px 0 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+    }
+    .tool-step {
+      font-size: 11px;
+      color: var(--body);
       display: grid;
       grid-template-columns: 14px 1fr auto;
       grid-template-rows: auto auto;
-      column-gap: 4px;
-      row-gap: 1px;
+      column-gap: 6px;
+      row-gap: 2px;
       cursor: pointer;
-      padding: 1px 0;
+      padding: 5px 8px;
+      background: var(--hairline-soft);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      transition: background 0.12s ease;
+    }
+    .tool-step:hover {
+      background: #eaeaea;
     }
     .tool-step .glyph {
       grid-column: 1; grid-row: 1;
-      font-family: var(--mono); font-weight: 700;
-      color: var(--ink-2); text-align: center;
+      font-family: var(--font-mono); font-weight: 700;
+      color: var(--mute); text-align: center;
     }
-    .tool-step.running .glyph { color: var(--lime); }
-    .tool-step.done    .glyph { color: var(--green); }
-    .tool-step.error   .glyph { color: var(--err);  }
+    .tool-step.running .glyph { color: var(--link); }
+    .tool-step.done    .glyph { color: var(--ink); }
+    .tool-step.error   .glyph { color: var(--error); }
     .tool-step .glyph::before { content: '⏺'; }
     .tool-step.running .glyph::before { content: '⠋'; animation: spinFrames 0.8s steps(10) infinite; }
     .tool-step.done    .glyph::before { content: '⏺'; }
@@ -410,145 +644,337 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .tool-step .name { color: var(--ink); font-weight: 600; }
-    .tool-step .paren { color: var(--ink-2); opacity: 0.7; }
-    .tool-step .args  { color: var(--lime); opacity: 0.85; }
-    .tool-step.error .name { color: var(--err); }
+    .tool-step .paren { color: var(--mute); }
+    .tool-step .args  { color: var(--body); }
+    .tool-step.error .name { color: var(--error); }
 
     .tool-step .ms {
       grid-column: 3; grid-row: 1;
-      color: var(--ink-2); opacity: 0.55; font-size: 10px;
+      color: var(--mute); font-size: 10px;
     }
 
     .tool-step .out {
       grid-column: 2 / span 2; grid-row: 2;
-      color: var(--ink-2);
+      color: var(--mute);
       display: flex; align-items: baseline; gap: 4px;
       font-size: 10.5px;
       min-width: 0;
     }
-    .tool-step .out .arc { color: var(--ink-2); opacity: 0.5; flex-shrink: 0; }
+    .tool-step .out .arc { color: var(--mute); opacity: 0.6; flex-shrink: 0; }
     .tool-step .out .arc::before { content: '⎿'; }
     .tool-step .out .preview {
       flex: 1; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .tool-step.error .out { color: var(--err); opacity: 0.85; }
-    .tool-step.running .out { color: var(--ink-2); opacity: 0.7; font-style: italic; }
+    .tool-step.error .out { color: var(--error); opacity: 0.9; }
+    .tool-step.running .out { color: var(--link); font-style: italic; }
     .tool-step.expanded .out .preview { white-space: pre-wrap; word-break: break-word; }
 
-    /* Once final response arrives, collapse the entire tool list into a
-       single click-to-expand summary. The full list re-appears on click. */
     .tool-steps.collapsed .tool-step { display: none; }
     .tool-steps.collapsed .tools-summary { display: flex; }
     .tools-summary {
       display: none; align-items: center; gap: 6px;
-      font-family: var(--mono); font-size: 10.5px;
-      color: var(--ink-2); cursor: pointer;
-      padding: 1px 0;
-      opacity: 0.7;
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--body); cursor: pointer;
+      padding: 4px 10px;
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-pill);
+      box-shadow: var(--shadow-whisper);
+      align-self: flex-start;
+      transition: border-color 0.15s ease, color 0.15s ease;
     }
-    .tools-summary:hover { opacity: 1; color: var(--ink); }
-    .tools-summary .glyph { color: var(--ink-2); font-weight: 700; width: 14px; text-align: center; }
+    .tools-summary:hover { border-color: var(--ink); color: var(--ink); }
+    .tools-summary .glyph { color: var(--mute); font-weight: 700; }
     .tools-summary .glyph::before { content: '⏺'; }
-    .tools-summary .arrow::before { content: '▸'; opacity: 0.5; }
+    .tools-summary .arrow::before { content: '▸'; opacity: 0.6; }
     .tool-steps.expanded-back .tools-summary .arrow::before { content: '▾'; }
     .tool-steps.expanded-back.collapsed .tool-step { display: grid; }
-    .tool-steps.expanded-back.collapsed .tools-summary { color: var(--ink); opacity: 1; }
+    .tool-steps.expanded-back.collapsed .tools-summary { border-color: var(--ink); color: var(--ink); }
 
     @keyframes spinFrames {
-      0%   { content: '⠋'; }
-      10%  { content: '⠙'; }
-      20%  { content: '⠹'; }
-      30%  { content: '⠸'; }
-      40%  { content: '⠼'; }
-      50%  { content: '⠴'; }
-      60%  { content: '⠦'; }
-      70%  { content: '⠧'; }
-      80%  { content: '⠇'; }
-      90%  { content: '⠏'; }
-      100% { content: '⠋'; }
+      0%   { content: '⠋'; } 10%  { content: '⠙'; } 20%  { content: '⠹'; }
+      30%  { content: '⠸'; } 40%  { content: '⠼'; } 50%  { content: '⠴'; }
+      60%  { content: '⠦'; } 70%  { content: '⠧'; } 80%  { content: '⠇'; }
+      90%  { content: '⠏'; } 100% { content: '⠋'; }
     }
 
-    /* Reasoning peek — quiet italic line above the answer */
+    /* Reasoning line */
     .reasoning {
-      font-size: 10px; color: var(--ink-2); opacity: 0.7;
+      font-size: 11px; color: var(--mute);
       font-style: italic;
-      margin: 2px 0 6px;
-      padding-left: 2px;
-      border-left: 1px dashed var(--line);
-      padding-left: 6px;
+      margin: 4px 0 8px;
+      padding-left: 8px;
+      border-left: 2px solid var(--hairline);
     }
 
-    /* Empty state — minimal greeting */
-    .empty {
-      align-self: center;
-      margin: auto 0;
-      text-align: center;
-      color: var(--ink-2);
-      font-size: 11px;
-      letter-spacing: 0.08em;
-    }
-    .empty .greet { color: var(--green); font-size: 14px; margin-bottom: 4px; }
-    .empty .hint  { opacity: 0.7; }
-
-    /* Input ─ seamless with chat, just a thin top line to delineate ── */
+    /* ── Input Area ────────────────────────────────────────────────── */
     .inp-row {
-      display: flex; align-items: stretch;
-      padding: 8px 8px 10px 14px;
-      border-top: 1px solid var(--line-2);
-      background: transparent;
+      flex: 0 0 auto;
+      padding: 10px 12px 14px;
+      background: var(--canvas);
+      border-top: 1px solid var(--hairline);
+      display: flex;
+      align-items: stretch;
       gap: 8px;
       -webkit-app-region: no-drag;
-      min-height: 50px;
     }
-    body.focused .inp-row { /* legacy no-op — inp-row is always solid now */ }
+
     .inp-row .field {
-      flex: 1; min-width: 0;
-      display: flex; align-items: stretch;
-      border: none;
-      background: transparent;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      padding: 6px 10px 6px 12px;
+      box-shadow: var(--shadow-whisper);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
+    .inp-row .field:focus-within {
+      border-color: var(--ink);
+      box-shadow: 0 0 0 1px var(--ink);
+    }
+
     .inp-row .prompt {
-      color: var(--green); font-weight: 700; user-select: none;
-      font-size: 15px;
-      padding: 4px 6px 4px 0;
-      align-self: center;
+      color: var(--mute);
+      font-family: var(--font-mono);
+      font-weight: 500;
+      font-size: 14px;
+      user-select: none;
+      padding-bottom: 6px;
     }
+
     .inp-row textarea {
       flex: 1;
       background: transparent;
-      border: none; outline: none; resize: none;
-      color: var(--ink);
-      font-family: var(--mono); font-size: 13px;
-      max-height: 120px; min-height: 28px;
-      line-height: 1.5;
-      caret-color: var(--green);
-      padding: 6px 4px;
-    }
-    .inp-row textarea::placeholder { color: var(--ink-2); opacity: 0.5; }
-    .inp-row .send {
-      background: transparent;
       border: none;
-      color: var(--green); cursor: pointer;
-      font-family: var(--mono); font-size: 24px; font-weight: 700;
-      padding: 0 12px;
-      min-width: 44px;
-      display: flex; align-items: center; justify-content: center;
-      line-height: 1;
-      transition: color 0.12s steps(2), transform 0.06s steps(2), opacity 0.12s steps(2);
+      outline: none;
+      resize: none;
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      max-height: 120px;
+      min-height: 26px;
+      line-height: 1.5;
+      caret-color: var(--link);
+      padding: 4px 0;
     }
-    .inp-row .send:hover:not(:disabled) { color: var(--lime); transform: scale(1.1); }
-    .inp-row .send:active:not(:disabled) { transform: translateY(1px) scale(1.05); }
+    .inp-row textarea::placeholder {
+      color: var(--faint);
+    }
+
+    /* Vercel Primary Action Pill / Circular Send Button */
+    .inp-row .send {
+      background: var(--primary);
+      border: none;
+      color: var(--on-primary);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-full);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.12s ease, opacity 0.12s ease, background 0.15s ease;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .inp-row .send:hover:not(:disabled) {
+      transform: scale(1.05);
+      background: #000000;
+    }
+    .inp-row .send:active:not(:disabled) {
+      transform: scale(0.96);
+    }
     .inp-row .send:disabled {
-      color: var(--ink-2);
-      background: transparent; cursor: default;
-      opacity: 0.4;
+      background: var(--hairline);
+      color: var(--faint);
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    /* ── Chats History Overlay ─────────────────────────────────────── */
+    .chats-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--canvas);
+      z-index: 50;
+      display: none;
+      flex-direction: column;
+      -webkit-app-region: no-drag;
+    }
+    .chats-overlay.open { display: flex; }
+
+    .chats-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--hairline);
+      background: var(--canvas-elevated);
+      min-height: 42px;
+    }
+    .chats-head .title {
+      flex: 1;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      color: var(--ink);
+    }
+    .chats-head .title b { font-weight: 600; }
+    .chats-head .close-x {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--body);
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      font-size: 16px;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+    .chats-head .close-x:hover {
+      background: var(--hairline-soft);
+      border-color: var(--hairline);
+      color: var(--ink);
+    }
+
+    .chats-search {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--hairline);
+      background: var(--canvas);
+    }
+    .chats-search input {
+      width: 100%;
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      padding: 7px 10px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .chats-search input:focus {
+      border-color: var(--ink);
+      box-shadow: 0 0 0 1px var(--ink);
+    }
+
+    .chats-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .chats-list::-webkit-scrollbar { width: 5px; }
+    .chats-list::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
+
+    .chats-empty {
+      padding: 36px 16px;
+      color: var(--mute);
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .chat-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--canvas-elevated);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: border-color 0.12s ease, box-shadow 0.12s ease;
+    }
+    .chat-row:hover {
+      border-color: var(--mute);
+      box-shadow: var(--shadow-whisper);
+    }
+    .chat-row.current {
+      border-color: var(--ink);
+      background: var(--hairline-soft);
+    }
+    .chat-row .chat-body { flex: 1; min-width: 0; }
+    .chat-row .chat-title {
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-row .chat-meta {
+      color: var(--mute);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-row .chat-meta .dot { color: var(--link); }
+    .chat-row .chat-del {
+      background: transparent;
+      border: 0;
+      color: var(--mute);
+      width: 24px;
+      height: 24px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+    }
+    .chat-row:hover .chat-del { display: flex; }
+    .chat-row .chat-del:hover {
+      background: rgba(238, 0, 0, 0.08);
+      color: var(--error);
+    }
+    .chat-row .chat-del svg { width: 13px; height: 13px; }
+
+    .chats-foot {
+      border-top: 1px solid var(--hairline);
+      padding: 10px 14px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: var(--canvas-elevated);
+    }
+    .chats-foot button {
+      background: var(--primary);
+      color: var(--on-primary);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 12px;
+      cursor: pointer;
+      transition: opacity 0.12s ease;
+    }
+    .chats-foot button:hover { opacity: 0.9; }
+    .chats-foot .spacer { flex: 1; }
+    .chats-foot .hint {
+      color: var(--mute);
+      font-family: var(--font-mono);
+      font-size: 11px;
     }
 
     /* ════════════════════════════════════════════════════════════════
-       MASCOT — pure pixel grid, rect-only SVG.
-       16×16 logical grid, each cell = 5px. Total 80×80.
-       Poses are <g> layers; JS toggles which is visible.
+       MASCOT ENGINE & POSES
        ════════════════════════════════════════════════════════════════ */
     .browy { display: block; }
     .browy g.pose { display: none; }
@@ -565,28 +991,22 @@
     .browy[data-pose="love"]  g.pose-love  { display: block; }
     .browy[data-pose="wow"]   g.pose-wow   { display: block; }
 
-    /* Antenna ball "powered" pulse — 2 discrete steps */
     .browy .ant-ball { animation: antPulse 1.6s steps(2) infinite; transform-origin: 40px 8px; }
     .browy .ant      { transform-origin: 40px 18px; animation: antSway 4s steps(4) infinite; }
     .browy .ant-glow { animation: glowPulse 1.6s steps(2) infinite; }
     .browy[data-pose="think"] .ant-ball { animation: antThink 0.4s steps(2) infinite; }
     .browy[data-pose="think"] .ant      { animation: antSway 1.2s steps(4) infinite; }
-    .browy[data-pose="work"]  .ant-ball { animation: antThink 0.25s steps(2) infinite; fill: var(--lime); }
+    .browy[data-pose="work"]  .ant-ball { animation: antThink 0.25s steps(2) infinite; fill: var(--cyan); }
     .browy[data-pose="work"]  .ant      { animation: antSway 0.8s steps(4) infinite; }
-    .browy[data-pose="err"]   .ant-ball { fill: var(--err); animation: antPulse 0.3s steps(2) infinite; }
+    .browy[data-pose="err"]   .ant-ball { fill: var(--error); animation: antPulse 0.3s steps(2) infinite; }
     .browy[data-pose="sleep"] .ant-ball { animation: antPulse 3s steps(2) infinite; opacity: 0.5; }
     .browy[data-pose="sleep"] .ant      { animation: none; transform: rotate(-4deg); }
-    .browy[data-pose="love"]  .ant-ball { fill: var(--err); }
+    .browy[data-pose="love"]  .ant-ball { fill: var(--error); }
     @keyframes antPulse  { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.4; } }
-    @keyframes antThink  { 0%,49% { fill: var(--lime); } 50%,100% { fill: var(--green); } }
+    @keyframes antThink  { 0%,49% { fill: var(--cyan); } 50%,100% { fill: var(--link); } }
     @keyframes antSway   { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
     @keyframes glowPulse { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.55; } }
 
-    /* Scanline subtle scroll — gives the screen life */
-    .browy .scan { animation: scanShift 2.4s steps(3) infinite; }
-    @keyframes scanShift { 0% { transform: translateY(0); } 33% { transform: translateY(1px); } 66% { transform: translateY(2px); } 100% { transform: translateY(0); } }
-
-    /* Arms — default at sides, animate per pose */
     .browy .arm-l, .browy .arm-l-hand { transform-origin: 8px 50px; }
     .browy .arm-r, .browy .arm-r-hand { transform-origin: 72px 50px; }
     .browy[data-pose="happy"] .arm-l       { transform: rotate(-30deg); }
@@ -599,467 +1019,306 @@
     @keyframes typeR { 0%,49% { transform: translateY(2px); } 50%,100% { transform: translateY(0); } }
     .browy[data-pose="wow"] .arm-l, .browy[data-pose="wow"] .arm-l-hand { transform: rotate(-15deg) translateX(-2px); }
     .browy[data-pose="wow"] .arm-r, .browy[data-pose="wow"] .arm-r-hand { transform: rotate(15deg)  translateX(2px); }
-    .browy[data-pose="sleep"] .arm-l, .browy[data-pose="sleep"] .arm-l-hand,
-    .browy[data-pose="sleep"] .arm-r, .browy[data-pose="sleep"] .arm-r-hand { opacity: 0.5; }
 
-    /* Idle breathing — head body lifts 1px every 2s */
     .browy { animation: breathe 2.4s steps(2) infinite; transform-origin: 40px 78px; }
     @keyframes breathe { 0%,49% { transform: translateY(0); } 50%,100% { transform: translateY(-1px); } }
     .browy[data-pose="sleep"] { animation: sleepBreathe 3.6s steps(3) infinite; }
     @keyframes sleepBreathe { 0%,33% { transform: translateY(0); } 34%,66% { transform: translateY(1px); } 67%,100% { transform: translateY(0); } }
 
-    /* Ground shadow contracts when bouncing */
     .browy.bounce ~ * .ground, .browy.bounce .ground { animation: shadowSquish 0.3s steps(2) 1; }
     @keyframes shadowSquish { 0%,100% { transform: scaleX(1); } 50% { transform: scaleX(0.7); } }
 
-    /* Reaction nudges — discrete 1-pixel shifts, no tween */
     .browy.nod    { animation: nod    0.3s steps(2) 1; }
     .browy.shake  { animation: shake  0.4s steps(2) 2; }
     .browy.bounce { animation: bounce 0.36s steps(3) 1; }
     .browy.spin   { animation: spin   0.45s steps(4) 1; }
-    .browy.wave   { animation: none; } /* wave handled via arm transforms */
     .browy.wave .arm-r, .browy.wave .arm-r-hand { animation: waveArm 0.5s steps(2) 3; }
     @keyframes waveArm { 0%,100% { transform: rotate(20deg); } 50% { transform: rotate(60deg) translateX(2px); } }
     @keyframes nod    { 0% { transform: translateY(0); } 50% { transform: translateY(3px); } 100% { transform: translateY(0); } }
-    @keyframes shake  { 0% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } 100% { transform: translateX(0); } }
+    @keyframes shake  { 0% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } 100% { transform: translateY(0); } }
     @keyframes bounce { 0%,100% { transform: translateY(0); } 33% { transform: translateY(-5px); } 66% { transform: translateY(-2px); } }
     @keyframes spin   { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
-
-    /* ── Chats overlay (history picker) ─────────────────────────────── */
-    .chats-overlay {
-      position: absolute; inset: 0;
-      background: var(--solid);
-      z-index: 50;
-      display: none;
-      flex-direction: column;
-      -webkit-app-region: no-drag;
-    }
-    .chats-overlay.open { display: flex; }
-    .chats-head {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--line);
-      background: var(--solid-2);
-      min-height: 40px;
-    }
-    .chats-head .title {
-      flex: 1;
-      font-family: var(--mono);
-      font-size: 11px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--ink-2);
-    }
-    .chats-head .title b { color: var(--green); font-weight: 600; }
-    .chats-head .close-x {
-      background: transparent; border: 0; color: var(--ink-2);
-      width: 26px; height: 26px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; border-radius: 3px;
-      font-family: var(--mono); font-size: 14px;
-    }
-    .chats-head .close-x:hover { background: rgba(255,255,255,0.06); color: var(--ink); }
-    .chats-search {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--line);
-      background: var(--solid);
-    }
-    .chats-search input {
-      width: 100%;
-      background: var(--solid-2);
-      border: 1px solid var(--line);
-      color: var(--ink);
-      font-family: var(--mono); font-size: 12px;
-      padding: 6px 8px;
-      outline: none;
-    }
-    .chats-search input:focus { border-color: var(--green); }
-    .chats-list {
-      flex: 1; overflow-y: auto;
-      padding: 4px 0;
-    }
-    .chats-list::-webkit-scrollbar { width: 4px; }
-    .chats-list::-webkit-scrollbar-thumb { background: rgba(74,222,128,0.25); }
-    .chats-empty {
-      padding: 32px 16px;
-      color: var(--ink-2);
-      text-align: center;
-      font-family: var(--mono); font-size: 11px;
-    }
-    .chats-retry {
-      display: block; margin: 0 auto 24px;
-      padding: 6px 14px;
-      background: transparent;
-      border: 1px solid var(--acc);
-      color: var(--acc);
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: var(--mono); font-size: 11px;
-    }
-    .chats-retry:hover { background: var(--acc); color: var(--bg); }
-    .chat-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--line);
-      cursor: pointer;
-      transition: background 0.12s;
-    }
-    .chat-row:hover { background: rgba(74,222,128,0.06); }
-    .chat-row.current { background: rgba(74,222,128,0.10); border-left: 2px solid var(--green); padding-left: 10px; }
-    .chat-row .chat-body { flex: 1; min-width: 0; }
-    .chat-row .chat-title {
-      color: var(--ink);
-      font-family: var(--mono); font-size: 12px;
-      font-weight: 500;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .chat-row .chat-meta {
-      color: var(--ink-2);
-      font-family: var(--mono); font-size: 10px;
-      margin-top: 3px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .chat-row .chat-meta .dot { color: var(--green); }
-    .chat-row .chat-del {
-      background: transparent; border: 0; color: var(--ink-2);
-      width: 24px; height: 24px;
-      display: none; align-items: center; justify-content: center;
-      cursor: pointer; border-radius: 3px;
-      flex-shrink: 0;
-    }
-    .chat-row:hover .chat-del { display: flex; }
-    .chat-row .chat-del:hover { background: rgba(248,113,113,0.16); color: var(--err); }
-    .chat-row .chat-del svg { width: 12px; height: 12px; }
-    .chats-foot {
-      border-top: 1px solid var(--line);
-      padding: 8px 12px;
-      display: flex; gap: 8px; align-items: center;
-      background: var(--solid-2);
-    }
-    .chats-foot button {
-      background: transparent;
-      border: 1px solid var(--line);
-      color: var(--ink); cursor: pointer;
-      font-family: var(--mono); font-size: 11px;
-      padding: 5px 10px;
-      letter-spacing: 0.05em;
-    }
-    .chats-foot button:hover { border-color: var(--green); color: var(--green); }
-    .chats-foot .spacer { flex: 1; }
-    .chats-foot .hint { color: var(--ink-2); font-family: var(--mono); font-size: 10px; }
   </style>
 </head>
 <body>
 <div class="app">
 
-  <div class="mascot" id="mascotBox" title="Browy">
+  <div class="mascot" id="mascotBox" title="Shinscan">
     <svg class="browy" id="browy" data-pose="idle" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
-      <!-- Grid: 80×80, 2px sub-grid. -->
-
-      <!-- ── ANTENNA: segmented stalk + octagonal bulb + glow halo ── -->
+      <!-- ── ANTENNA: Vercel blue/cyan signal bulb ── -->
       <g class="ant" id="ant">
-        <!-- glow halo (diffuse, behind bulb) -->
-        <rect x="28" y="4" width="24" height="6" fill="rgba(74,222,128,0.18)" class="ant-glow"/>
-        <rect x="30" y="2" width="20" height="2" fill="rgba(74,222,128,0.12)" class="ant-glow"/>
-        <rect x="30" y="10" width="20" height="2" fill="rgba(74,222,128,0.12)" class="ant-glow"/>
-        <!-- octagonal bulb body -->
-        <rect x="34" y="2" width="12" height="2" fill="#4ade80" class="ant-ball"/>
-        <rect x="32" y="4" width="16" height="6" fill="#4ade80" class="ant-ball"/>
-        <rect x="34" y="10" width="12" height="2" fill="#4ade80" class="ant-ball"/>
+        <rect x="28" y="4" width="24" height="6" fill="rgba(0,112,243,0.18)" class="ant-glow"/>
+        <rect x="30" y="2" width="20" height="2" fill="rgba(0,112,243,0.12)" class="ant-glow"/>
+        <rect x="30" y="10" width="20" height="2" fill="rgba(0,112,243,0.12)" class="ant-glow"/>
+        <!-- bulb body -->
+        <rect x="34" y="2" width="12" height="2" fill="#0070f3" class="ant-ball"/>
+        <rect x="32" y="4" width="16" height="6" fill="#0070f3" class="ant-ball"/>
+        <rect x="34" y="10" width="12" height="2" fill="#0070f3" class="ant-ball"/>
         <!-- bulb shine -->
-        <rect x="34" y="4" width="4" height="2" fill="#a3f3b8" class="ant-shine"/>
-        <rect x="32" y="6" width="2" height="2" fill="#a3f3b8" class="ant-shine"/>
-        <!-- bulb shadow underside -->
-        <rect x="42" y="8" width="4" height="2" fill="#15803d"/>
-        <!-- segmented stalk -->
-        <rect x="38" y="12" width="4" height="2" fill="#22c55e"/>
-        <rect x="38" y="14" width="4" height="2" fill="#15803d"/>
-        <rect x="38" y="16" width="4" height="2" fill="#1f3826"/>
+        <rect x="34" y="4" width="4" height="2" fill="#79b8ff" class="ant-shine"/>
+        <rect x="32" y="6" width="2" height="2" fill="#79b8ff" class="ant-shine"/>
+        <!-- stalk -->
+        <rect x="38" y="12" width="4" height="2" fill="#404040"/>
+        <rect x="38" y="14" width="4" height="2" fill="#262626"/>
+        <rect x="38" y="16" width="4" height="2" fill="#171717"/>
       </g>
 
-      <!-- ── HEAD: bezel with octagonal corner cuts ── -->
-      <!-- Top rounded edge -->
-      <rect x="14" y="18" width="52" height="2" fill="#22c55e"/>
-      <rect x="12" y="20" width="56" height="2" fill="#22c55e"/>
-      <!-- Main bezel body (full 60×42) -->
-      <rect x="10" y="22" width="60" height="42" fill="#15803d"/>
-      <!-- Bottom rounded edge -->
-      <rect x="12" y="64" width="56" height="2" fill="#15803d"/>
-      <rect x="14" y="66" width="52" height="2" fill="#15803d"/>
-      <rect x="16" y="68" width="48" height="2" fill="#1f3826"/>
-      <!-- Top inner highlight band -->
-      <rect x="12" y="22" width="56" height="2" fill="#22c55e"/>
-      <!-- Left side highlight (subtle 3D) -->
-      <rect x="10" y="22" width="2" height="42" fill="#22c55e" opacity="0.45"/>
-      <!-- Right side shadow -->
-      <rect x="68" y="22" width="2" height="42" fill="#0a1f12" opacity="0.35"/>
+      <!-- ── HEAD: Vercel Matte Ink Bezel ── -->
+      <rect x="14" y="18" width="52" height="2" fill="#262626"/>
+      <rect x="12" y="20" width="56" height="2" fill="#262626"/>
+      <rect x="10" y="22" width="60" height="42" fill="#171717"/>
+      <rect x="12" y="64" width="56" height="2" fill="#171717"/>
+      <rect x="14" y="66" width="52" height="2" fill="#171717"/>
+      <rect x="16" y="68" width="48" height="2" fill="#0a0a0a"/>
+      <rect x="12" y="22" width="56" height="2" fill="#333333"/>
+      <rect x="10" y="22" width="2" height="42" fill="#404040" opacity="0.45"/>
+      <rect x="68" y="22" width="2" height="42" fill="#000000" opacity="0.5"/>
 
-      <!-- side ear-knobs (volume/power) -->
-      <rect x="8" y="32" width="2" height="6" fill="#1f3826"/>
-      <rect x="6" y="33" width="2" height="4" fill="#1f3826"/>
-      <rect x="8" y="42" width="2" height="6" fill="#1f3826"/>
-      <rect x="6" y="43" width="2" height="4" fill="#1f3826"/>
-      <rect x="70" y="32" width="2" height="6" fill="#1f3826"/>
-      <rect x="72" y="33" width="2" height="4" fill="#1f3826"/>
-      <rect x="70" y="42" width="2" height="6" fill="#1f3826"/>
-      <rect x="72" y="43" width="2" height="4" fill="#1f3826"/>
+      <!-- side knobs -->
+      <rect x="8" y="32" width="2" height="6" fill="#262626"/>
+      <rect x="6" y="33" width="2" height="4" fill="#262626"/>
+      <rect x="8" y="42" width="2" height="6" fill="#262626"/>
+      <rect x="6" y="43" width="2" height="4" fill="#262626"/>
+      <rect x="70" y="32" width="2" height="6" fill="#262626"/>
+      <rect x="72" y="33" width="2" height="4" fill="#262626"/>
+      <rect x="70" y="42" width="2" height="6" fill="#262626"/>
+      <rect x="72" y="43" width="2" height="4" fill="#262626"/>
 
-      <!-- bezel corner bolts -->
-      <rect x="12" y="22" width="2" height="2" fill="#0a1f12"/>
-      <rect x="66" y="22" width="2" height="2" fill="#0a1f12"/>
-      <rect x="12" y="62" width="2" height="2" fill="#0a1f12"/>
-      <rect x="66" y="62" width="2" height="2" fill="#0a1f12"/>
-      <rect x="13" y="23" width="1" height="1" fill="#22c55e"/>
-      <rect x="67" y="23" width="1" height="1" fill="#22c55e"/>
+      <!-- corner bolts -->
+      <rect x="12" y="22" width="2" height="2" fill="#000000"/>
+      <rect x="66" y="22" width="2" height="2" fill="#000000"/>
+      <rect x="12" y="62" width="2" height="2" fill="#000000"/>
+      <rect x="66" y="62" width="2" height="2" fill="#000000"/>
+      <rect x="13" y="23" width="1" height="1" fill="#525252"/>
+      <rect x="67" y="23" width="1" height="1" fill="#525252"/>
 
-      <!-- ── SCREEN inset (deep CRT, full 40 tall so poses work) ── -->
-      <rect x="15" y="25" width="50" height="40" fill="#0a1f12"/>
-      <!-- inner screen border (1px lighter inset) -->
-      <rect x="15" y="25" width="50" height="1" fill="#1f3826"/>
-      <rect x="15" y="64" width="50" height="1" fill="#1f3826"/>
-      <rect x="15" y="25" width="1" height="40" fill="#1f3826"/>
-      <rect x="64" y="25" width="1" height="40" fill="#1f3826"/>
-      <!-- scanline stripes -->
-      <rect x="15" y="32" width="50" height="1" fill="rgba(74,222,128,0.07)" class="scan"/>
-      <rect x="15" y="42" width="50" height="1" fill="rgba(74,222,128,0.07)" class="scan"/>
-      <rect x="15" y="52" width="50" height="1" fill="rgba(74,222,128,0.07)" class="scan"/>
-      <!-- screen glare top-left corner -->
-      <rect x="16" y="26" width="8" height="1" fill="rgba(165,243,184,0.22)"/>
-      <rect x="16" y="27" width="3" height="1" fill="rgba(165,243,184,0.15)"/>
-      <rect x="16" y="28" width="1" height="1" fill="rgba(165,243,184,0.10)"/>
+      <!-- ── SCREEN INSET ── -->
+      <rect x="15" y="25" width="50" height="40" fill="#0a0a0a"/>
+      <rect x="15" y="25" width="50" height="1" fill="#262626"/>
+      <rect x="15" y="64" width="50" height="1" fill="#262626"/>
+      <rect x="15" y="25" width="1" height="40" fill="#262626"/>
+      <rect x="64" y="25" width="1" height="40" fill="#262626"/>
+      <!-- scanlines -->
+      <rect x="15" y="32" width="50" height="1" fill="rgba(255,255,255,0.04)" class="scan"/>
+      <rect x="15" y="42" width="50" height="1" fill="rgba(255,255,255,0.04)" class="scan"/>
+      <rect x="15" y="52" width="50" height="1" fill="rgba(255,255,255,0.04)" class="scan"/>
 
-      <!-- speaker grille (on the rounded bottom bezel band) -->
-      <rect x="22" y="66" width="36" height="1" fill="#0a1f12"/>
       <!-- power LED -->
-      <rect x="60" y="66" width="2" height="1" fill="#c5f04b" class="power-led"/>
+      <rect x="60" y="66" width="2" height="1" fill="#0070f3" class="power-led"/>
 
-      <!-- ── POSE: idle (looking forward) ── -->
+      <!-- ── POSE: idle ── -->
       <g class="pose pose-idle">
-        <!-- Eye whites (left + right) -->
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <!-- Pupils centered -->
-        <rect x="26" y="38" width="4" height="4" fill="#0a1f12"/>
-        <rect x="50" y="38" width="4" height="4" fill="#0a1f12"/>
-        <!-- Mouth (small grin pixel) -->
-        <rect x="34" y="55" width="12" height="2" fill="#4ade80"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="26" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="50" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="34" y="55" width="12" height="2" fill="#50e3c2"/>
       </g>
 
-      <!-- ── POSE: looking left ── -->
+      <!-- ── POSE: left ── -->
       <g class="pose pose-left">
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="22" y="38" width="4" height="4" fill="#0a1f12"/>
-        <rect x="46" y="38" width="4" height="4" fill="#0a1f12"/>
-        <rect x="34" y="55" width="12" height="2" fill="#4ade80"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="22" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="46" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="34" y="55" width="12" height="2" fill="#50e3c2"/>
       </g>
 
-      <!-- ── POSE: looking right ── -->
+      <!-- ── POSE: right ── -->
       <g class="pose pose-right">
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="30" y="38" width="4" height="4" fill="#0a1f12"/>
-        <rect x="54" y="38" width="4" height="4" fill="#0a1f12"/>
-        <rect x="34" y="55" width="12" height="2" fill="#4ade80"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="30" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="54" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="34" y="55" width="12" height="2" fill="#50e3c2"/>
       </g>
 
-      <!-- ── POSE: looking up (curious) ── -->
+      <!-- ── POSE: up ── -->
       <g class="pose pose-up">
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="26" y="35" width="4" height="4" fill="#0a1f12"/>
-        <rect x="50" y="35" width="4" height="4" fill="#0a1f12"/>
-        <rect x="34" y="55" width="12" height="2" fill="#4ade80"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="26" y="35" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="50" y="35" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="34" y="55" width="12" height="2" fill="#50e3c2"/>
       </g>
 
-      <!-- ── POSE: blink (closed) ── -->
+      <!-- ── POSE: blink ── -->
       <g class="pose pose-blink">
-        <rect x="22" y="40" width="12" height="2" fill="#4ade80"/>
-        <rect x="46" y="40" width="12" height="2" fill="#4ade80"/>
-        <rect x="34" y="55" width="12" height="2" fill="#4ade80"/>
+        <rect x="22" y="40" width="12" height="2" fill="#50e3c2"/>
+        <rect x="46" y="40" width="12" height="2" fill="#50e3c2"/>
+        <rect x="34" y="55" width="12" height="2" fill="#50e3c2"/>
       </g>
 
-      <!-- ── POSE: happy (eyes-up, ^^ smile) ── -->
+      <!-- ── POSE: happy ── -->
       <g class="pose pose-happy">
-        <!-- Happy eye arcs ^_^ — built from 3-rect arches -->
-        <rect x="24" y="40" width="2" height="2" fill="#4ade80"/>
-        <rect x="26" y="38" width="6" height="2" fill="#4ade80"/>
-        <rect x="32" y="40" width="2" height="2" fill="#4ade80"/>
-        <rect x="48" y="40" width="2" height="2" fill="#4ade80"/>
-        <rect x="50" y="38" width="6" height="2" fill="#4ade80"/>
-        <rect x="56" y="40" width="2" height="2" fill="#4ade80"/>
-        <!-- Big smile -->
-        <rect x="30" y="54" width="20" height="2" fill="#c5f04b"/>
-        <rect x="28" y="52" width="2"  height="2" fill="#c5f04b"/>
-        <rect x="50" y="52" width="2"  height="2" fill="#c5f04b"/>
+        <rect x="24" y="40" width="2" height="2" fill="#50e3c2"/>
+        <rect x="26" y="38" width="6" height="2" fill="#50e3c2"/>
+        <rect x="32" y="40" width="2" height="2" fill="#50e3c2"/>
+        <rect x="48" y="40" width="2" height="2" fill="#50e3c2"/>
+        <rect x="50" y="38" width="6" height="2" fill="#50e3c2"/>
+        <rect x="56" y="40" width="2" height="2" fill="#50e3c2"/>
+        <rect x="30" y="54" width="20" height="2" fill="#00dfd8"/>
+        <rect x="28" y="52" width="2"  height="2" fill="#00dfd8"/>
+        <rect x="50" y="52" width="2"  height="2" fill="#00dfd8"/>
       </g>
 
-      <!-- ── POSE: thinking (eyes look up + dots) ── -->
+      <!-- ── POSE: think ── -->
       <g class="pose pose-think">
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="28" y="35" width="4" height="4" fill="#0a1f12"/>
-        <rect x="52" y="35" width="4" height="4" fill="#0a1f12"/>
-        <rect x="34" y="55" width="12" height="2" fill="#4ade80"/>
-        <!-- thought dots -->
-        <rect x="30" y="60" width="3" height="3" fill="#c5f04b"/>
-        <rect x="38" y="60" width="3" height="3" fill="#c5f04b"/>
-        <rect x="46" y="60" width="3" height="3" fill="#c5f04b"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="28" y="35" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="52" y="35" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="34" y="55" width="12" height="2" fill="#50e3c2"/>
+        <rect x="30" y="60" width="3" height="3" fill="#0070f3"/>
+        <rect x="38" y="60" width="3" height="3" fill="#0070f3"/>
+        <rect x="46" y="60" width="3" height="3" fill="#0070f3"/>
       </g>
 
-      <!-- ── POSE: error (X eyes, frown) ── -->
+      <!-- ── POSE: err ── -->
       <g class="pose pose-err">
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <!-- X over left eye -->
-        <rect x="24" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="26" y="38" width="2" height="2" fill="#f87171"/>
-        <rect x="28" y="40" width="2" height="2" fill="#f87171"/>
-        <rect x="30" y="42" width="2" height="2" fill="#f87171"/>
-        <rect x="30" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="28" y="38" width="2" height="2" fill="#f87171"/>
-        <rect x="26" y="40" width="2" height="2" fill="#f87171"/>
-        <rect x="24" y="42" width="2" height="2" fill="#f87171"/>
-        <!-- X over right eye -->
-        <rect x="48" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="50" y="38" width="2" height="2" fill="#f87171"/>
-        <rect x="52" y="40" width="2" height="2" fill="#f87171"/>
-        <rect x="54" y="42" width="2" height="2" fill="#f87171"/>
-        <rect x="54" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="52" y="38" width="2" height="2" fill="#f87171"/>
-        <rect x="50" y="40" width="2" height="2" fill="#f87171"/>
-        <rect x="48" y="42" width="2" height="2" fill="#f87171"/>
-        <!-- Frown -->
-        <rect x="34" y="56" width="12" height="2" fill="#f87171"/>
-        <rect x="32" y="58" width="2"  height="2" fill="#f87171"/>
-        <rect x="46" y="58" width="2"  height="2" fill="#f87171"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="24" y="36" width="2" height="2" fill="#ee0000"/>
+        <rect x="26" y="38" width="2" height="2" fill="#ee0000"/>
+        <rect x="28" y="40" width="2" height="2" fill="#ee0000"/>
+        <rect x="30" y="42" width="2" height="2" fill="#ee0000"/>
+        <rect x="30" y="36" width="2" height="2" fill="#ee0000"/>
+        <rect x="28" y="38" width="2" height="2" fill="#ee0000"/>
+        <rect x="26" y="40" width="2" height="2" fill="#ee0000"/>
+        <rect x="24" y="42" width="2" height="2" fill="#ee0000"/>
+        <rect x="48" y="36" width="2" height="2" fill="#ee0000"/>
+        <rect x="50" y="38" width="2" height="2" fill="#ee0000"/>
+        <rect x="52" y="40" width="2" height="2" fill="#ee0000"/>
+        <rect x="54" y="42" width="2" height="2" fill="#ee0000"/>
+        <rect x="54" y="36" width="2" height="2" fill="#ee0000"/>
+        <rect x="52" y="38" width="2" height="2" fill="#ee0000"/>
+        <rect x="50" y="40" width="2" height="2" fill="#ee0000"/>
+        <rect x="48" y="42" width="2" height="2" fill="#ee0000"/>
+        <rect x="34" y="56" width="12" height="2" fill="#ee0000"/>
+        <rect x="32" y="58" width="2"  height="2" fill="#ee0000"/>
+        <rect x="46" y="58" width="2"  height="2" fill="#ee0000"/>
       </g>
 
-      <!-- ── POSE: work (typing — focused eyes + small mouth, gear icon) ── -->
+      <!-- ── POSE: work ── -->
       <g class="pose pose-work">
-        <rect x="22" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="46" y="35" width="12" height="10" fill="#d8e3d8"/>
-        <rect x="26" y="38" width="4" height="4" fill="#0a1f12" class="work-eye-l"/>
-        <rect x="50" y="38" width="4" height="4" fill="#0a1f12" class="work-eye-r"/>
-        <!-- Determined mouth -->
-        <rect x="36" y="55" width="8" height="2" fill="#c5f04b"/>
-        <!-- gear/cog accent bottom-right -->
-        <rect x="52" y="60" width="2" height="2" fill="#c5f04b"/>
-        <rect x="56" y="60" width="2" height="2" fill="#c5f04b"/>
-        <rect x="54" y="58" width="2" height="2" fill="#c5f04b"/>
-        <rect x="54" y="62" width="2" height="2" fill="#c5f04b"/>
+        <rect x="22" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="46" y="35" width="12" height="10" fill="#ffffff"/>
+        <rect x="26" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="50" y="38" width="4" height="4" fill="#0a0a0a"/>
+        <rect x="36" y="55" width="8" height="2" fill="#00dfd8"/>
+        <rect x="52" y="60" width="2" height="2" fill="#0070f3"/>
+        <rect x="56" y="60" width="2" height="2" fill="#0070f3"/>
+        <rect x="54" y="58" width="2" height="2" fill="#0070f3"/>
+        <rect x="54" y="62" width="2" height="2" fill="#0070f3"/>
       </g>
 
-      <!-- ── POSE: sleep (closed eyes + Z) ── -->
+      <!-- ── POSE: sleep ── -->
       <g class="pose pose-sleep">
-        <rect x="22" y="40" width="12" height="2" fill="#4ade80"/>
-        <rect x="46" y="40" width="12" height="2" fill="#4ade80"/>
-        <rect x="34" y="55" width="12" height="2" fill="#1f3826"/>
-        <!-- Z's floating right -->
-        <rect x="58" y="28" width="6" height="2" fill="#c5f04b" class="zzz"/>
-        <rect x="62" y="30" width="2" height="2" fill="#c5f04b" class="zzz"/>
-        <rect x="60" y="32" width="2" height="2" fill="#c5f04b" class="zzz"/>
-        <rect x="58" y="34" width="6" height="2" fill="#c5f04b" class="zzz"/>
+        <rect x="22" y="40" width="12" height="2" fill="#50e3c2"/>
+        <rect x="46" y="40" width="12" height="2" fill="#50e3c2"/>
+        <rect x="34" y="55" width="12" height="2" fill="#262626"/>
+        <rect x="58" y="28" width="6" height="2" fill="#79b8ff" class="zzz"/>
+        <rect x="62" y="30" width="2" height="2" fill="#79b8ff" class="zzz"/>
+        <rect x="60" y="32" width="2" height="2" fill="#79b8ff" class="zzz"/>
+        <rect x="58" y="34" width="6" height="2" fill="#79b8ff" class="zzz"/>
       </g>
 
-      <!-- ── POSE: love (heart eyes) ── -->
+      <!-- ── POSE: love ── -->
       <g class="pose pose-love">
-        <!-- left heart -->
-        <rect x="24" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="30" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="22" y="38" width="12" height="2" fill="#f87171"/>
-        <rect x="22" y="40" width="12" height="2" fill="#f87171"/>
-        <rect x="24" y="42" width="8" height="2" fill="#f87171"/>
-        <rect x="26" y="44" width="4" height="2" fill="#f87171"/>
-        <!-- right heart -->
-        <rect x="48" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="54" y="36" width="2" height="2" fill="#f87171"/>
-        <rect x="46" y="38" width="12" height="2" fill="#f87171"/>
-        <rect x="46" y="40" width="12" height="2" fill="#f87171"/>
-        <rect x="48" y="42" width="8" height="2" fill="#f87171"/>
-        <rect x="50" y="44" width="4" height="2" fill="#f87171"/>
-        <rect x="30" y="54" width="20" height="2" fill="#c5f04b"/>
+        <rect x="24" y="36" width="2" height="2" fill="#ff0080"/>
+        <rect x="30" y="36" width="2" height="2" fill="#ff0080"/>
+        <rect x="22" y="38" width="12" height="2" fill="#ff0080"/>
+        <rect x="22" y="40" width="12" height="2" fill="#ff0080"/>
+        <rect x="24" y="42" width="8" height="2" fill="#ff0080"/>
+        <rect x="26" y="44" width="4" height="2" fill="#ff0080"/>
+        <rect x="48" y="36" width="2" height="2" fill="#ff0080"/>
+        <rect x="54" y="36" width="2" height="2" fill="#ff0080"/>
+        <rect x="46" y="38" width="12" height="2" fill="#ff0080"/>
+        <rect x="46" y="40" width="12" height="2" fill="#ff0080"/>
+        <rect x="48" y="42" width="8" height="2" fill="#ff0080"/>
+        <rect x="50" y="44" width="4" height="2" fill="#ff0080"/>
+        <rect x="30" y="54" width="20" height="2" fill="#ff0080"/>
       </g>
 
-      <!-- ── POSE: wow (surprised — wide eyes + O mouth) ── -->
+      <!-- ── POSE: wow ── -->
       <g class="pose pose-wow">
-        <rect x="20" y="33" width="14" height="14" fill="#d8e3d8"/>
-        <rect x="46" y="33" width="14" height="14" fill="#d8e3d8"/>
-        <rect x="24" y="37" width="6" height="6" fill="#0a1f12"/>
-        <rect x="50" y="37" width="6" height="6" fill="#0a1f12"/>
-        <!-- O mouth -->
-        <rect x="36" y="54" width="8" height="2" fill="#0a1f12"/>
-        <rect x="34" y="56" width="2" height="4" fill="#0a1f12"/>
-        <rect x="44" y="56" width="2" height="4" fill="#0a1f12"/>
-        <rect x="36" y="60" width="8" height="2" fill="#0a1f12"/>
+        <rect x="20" y="33" width="14" height="14" fill="#ffffff"/>
+        <rect x="46" y="33" width="14" height="14" fill="#ffffff"/>
+        <rect x="24" y="37" width="6" height="6" fill="#0a0a0a"/>
+        <rect x="50" y="37" width="6" height="6" fill="#0a0a0a"/>
+        <rect x="36" y="54" width="8" height="2" fill="#0a0a0a"/>
+        <rect x="34" y="56" width="2" height="4" fill="#0a0a0a"/>
+        <rect x="44" y="56" width="2" height="4" fill="#0a0a0a"/>
+        <rect x="36" y="60" width="8" height="2" fill="#0a0a0a"/>
       </g>
 
-      <!-- ── ARMS (overlay, animatable) ── -->
+      <!-- ── ARMS ── -->
       <g class="arms" id="arms">
-        <!-- Default position: small stub arms tucked at sides -->
-        <rect class="arm-l" x="6"  y="50" width="2" height="6" fill="#1f3826"/>
-        <rect class="arm-r" x="72" y="50" width="2" height="6" fill="#1f3826"/>
-        <!-- Hand pixels -->
-        <rect class="arm-l-hand" x="6"  y="54" width="2" height="2" fill="#15803d"/>
-        <rect class="arm-r-hand" x="72" y="54" width="2" height="2" fill="#15803d"/>
+        <rect class="arm-l" x="6"  y="50" width="2" height="6" fill="#262626"/>
+        <rect class="arm-r" x="72" y="50" width="2" height="6" fill="#262626"/>
+        <rect class="arm-l-hand" x="6"  y="54" width="2" height="2" fill="#404040"/>
+        <rect class="arm-r-hand" x="72" y="54" width="2" height="2" fill="#404040"/>
       </g>
 
-      <!-- ── BODY STAND (neck + base) ── -->
-      <rect x="36" y="70" width="8" height="2" fill="#1f3826"/>
-      <rect x="32" y="72" width="16" height="2" fill="#15803d"/>
-      <rect x="32" y="72" width="16" height="1" fill="#22c55e"/>
+      <!-- ── BODY STAND ── -->
+      <rect x="36" y="70" width="8" height="2" fill="#262626"/>
+      <rect x="32" y="72" width="16" height="2" fill="#171717"/>
+      <rect x="32" y="72" width="16" height="1" fill="#333333"/>
 
-      <!-- ── FEET (chunkier with toe detail) ── -->
-      <rect x="22" y="74" width="10" height="4" fill="#1f3826"/>
-      <rect x="48" y="74" width="10" height="4" fill="#1f3826"/>
-      <!-- toe highlights -->
-      <rect x="22" y="74" width="10" height="1" fill="#15803d"/>
-      <rect x="48" y="74" width="10" height="1" fill="#15803d"/>
-      <!-- toe gaps (between toes) -->
-      <rect x="26" y="76" width="1" height="2" fill="#0a1f12"/>
-      <rect x="29" y="76" width="1" height="2" fill="#0a1f12"/>
-      <rect x="52" y="76" width="1" height="2" fill="#0a1f12"/>
-      <rect x="55" y="76" width="1" height="2" fill="#0a1f12"/>
+      <!-- ── FEET ── -->
+      <rect x="22" y="74" width="10" height="4" fill="#262626"/>
+      <rect x="48" y="74" width="10" height="4" fill="#262626"/>
+      <rect x="22" y="74" width="10" height="1" fill="#404040"/>
+      <rect x="48" y="74" width="10" height="1" fill="#404040"/>
+      <rect x="26" y="76" width="1" height="2" fill="#0a0a0a"/>
+      <rect x="29" y="76" width="1" height="2" fill="#0a0a0a"/>
+      <rect x="52" y="76" width="1" height="2" fill="#0a0a0a"/>
+      <rect x="55" y="76" width="1" height="2" fill="#0a0a0a"/>
 
-      <!-- ── GROUND SHADOW (dotted) ── -->
-      <rect x="20" y="78" width="2" height="1" fill="rgba(0,0,0,0.35)" class="ground"/>
-      <rect x="24" y="78" width="6" height="1" fill="rgba(0,0,0,0.4)" class="ground"/>
-      <rect x="32" y="78" width="16" height="1" fill="rgba(0,0,0,0.45)" class="ground"/>
-      <rect x="50" y="78" width="6" height="1" fill="rgba(0,0,0,0.4)" class="ground"/>
-      <rect x="58" y="78" width="2" height="1" fill="rgba(0,0,0,0.35)" class="ground"/>
+      <!-- ── GROUND SHADOW ── -->
+      <rect x="20" y="78" width="2" height="1" fill="rgba(0,0,0,0.15)" class="ground"/>
+      <rect x="24" y="78" width="6" height="1" fill="rgba(0,0,0,0.20)" class="ground"/>
+      <rect x="32" y="78" width="16" height="1" fill="rgba(0,0,0,0.25)" class="ground"/>
+      <rect x="50" y="78" width="6" height="1" fill="rgba(0,0,0,0.20)" class="ground"/>
+      <rect x="58" y="78" width="2" height="1" fill="rgba(0,0,0,0.15)" class="ground"/>
     </svg>
-    <!-- mascot pip removed -->
-
   </div>
 
+  <!-- ── Top Titlebar ──────────────────────────────────────────────── -->
   <div class="titlebar">
     <div class="tb-brand-cell">
       <span class="tb-dot" id="dot"></span>
-      <span class="tb-brand">browy</span>
+      <span class="tb-brand">shinscan</span>
       <span class="tb-tag" id="modeTag" title="Current chat">// browser agent</span>
     </div>
     <div class="tb-ctrls">
       <button class="tb-btn tb-stop danger" id="stopBtn" title="Stop generation (Esc)">
         ■<span class="lbl">stop</span>
       </button>
-      <button class="tb-btn" id="newChatBtn" title="Start a new chat (saves the current one to history)">
-        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <button class="tb-btn" id="newChatBtn" title="Start a new chat (saves current chat to history)">
+        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 3h7l3 3v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/>
           <path d="M8 7v4M6 9h4"/>
         </svg>
       </button>
       <button class="tb-btn" id="chatsBtn" title="Open past chats">
-        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M2 4h12M2 8h12M2 12h8"/>
         </svg>
       </button>
       <button class="tb-btn" id="exportBtn" title="Export this chat as Markdown (Ctrl+Shift+E)">
-        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 2v8M5 7l3 3 3-3M3 12v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1"/>
         </svg>
       </button>
+      <button class="tb-btn" id="providersBtn" title="LLM Providers & AI Gateways (DeepSeek, OmniRoute, etc.)">
+        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1v3M8 12v3M1 8h3M12 8h3M3.05 3.05l2.12 2.12M10.83 10.83l2.12 2.12M3.05 12.95l2.12-2.12M10.83 5.17l2.12-2.12"/>
+        </svg>
+      </button>
       <button class="tb-btn" id="settingsBtn" title="Control panel — browsers, model, settings">
-        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
+        <svg class="tb-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linejoin="round" aria-hidden="true">
           <path d="M9.4 1.5h-2.8l-.4 1.8a4.7 4.7 0 0 0-1.4.8l-1.7-.7-1.4 2.4 1.4 1.2a4.7 4.7 0 0 0 0 1.6l-1.4 1.2 1.4 2.4 1.7-.7c.43.34.9.6 1.4.8l.4 1.8h2.8l.4-1.8c.5-.2.97-.46 1.4-.8l1.7.7 1.4-2.4-1.4-1.2a4.7 4.7 0 0 0 0-1.6l1.4-1.2-1.4-2.4-1.7.7a4.7 4.7 0 0 0-1.4-.8L9.4 1.5z"/>
           <circle cx="8" cy="8" r="1.9"/>
         </svg>
@@ -1067,17 +1326,19 @@
     </div>
   </div>
 
+  <!-- ── Secondary Infobar ─────────────────────────────────────────── -->
   <div class="infobar">
     <span class="ib-browser" id="brand">—</span>
     <span class="ib-tabs" id="tabs">0 tabs</span>
     <span class="ib-sep">│</span>
     <span class="ib-ttl" id="ttl" title="">connecting…</span>
     <span class="ib-host" id="host"></span>
-    <span class="ib-browsers" id="browsersChip" title="Connected / installed browsers (open settings to launch)">
+    <span class="ib-browsers" id="browsersChip" title="Connected / installed browsers">
       <span class="ib-bcount" id="browsersCount">0</span>/<span id="browsersTotal">0</span>
     </span>
   </div>
 
+  <!-- ── Reconnect Banner ──────────────────────────────────────────── -->
   <div class="conn-banner" id="connBanner" role="status" aria-live="polite">
     <span class="cb-spinner" aria-hidden="true"></span>
     <span id="connBannerText">host disconnected — reconnecting…</span>
@@ -1085,24 +1346,46 @@
     <span id="connBannerAction"></span>
   </div>
 
+  <!-- ── Main Chat Panel ───────────────────────────────────────────── -->
   <div class="panel">
 
     <div class="msgs" id="msgs">
+      <!-- Empty / Hero state with Vercel Mesh Gradient -->
       <div class="empty" id="empty">
-        <div class="greet">browy</div>
+        <div class="empty-mesh" aria-hidden="true"></div>
+        <div class="empty-eyebrow">
+          <span class="empty-badge">AI BROWSER AGENT</span>
+        </div>
+        <div class="greet">shinscan</div>
+        <div class="empty-desc">Drive real tabs through chat · Automate, inspect, navigate</div>
         <div class="hint">// type below</div>
+        <div class="empty-suggestions">
+          <button type="button" class="sugg-chip" data-prompt="Summarize this page in 3 clear bullet points">
+            <span class="sugg-icon">⚡</span>
+            <span>Summarize page</span>
+          </button>
+          <button type="button" class="sugg-chip" data-prompt="Find all clickable buttons and inputs on this page">
+            <span class="sugg-icon">🔍</span>
+            <span>Inspect elements</span>
+          </button>
+          <button type="button" class="sugg-chip" data-prompt="Extract the main text content to markdown">
+            <span class="sugg-icon">📋</span>
+            <span>Extract text</span>
+          </button>
+        </div>
       </div>
     </div>
 
+    <!-- Input Row with Vercel pill button -->
     <div class="inp-row" id="inpRow">
       <div class="field">
         <span class="prompt">&gt;</span>
-        <textarea id="inp" rows="1" placeholder="ask browy…" autofocus></textarea>
+        <textarea id="inp" rows="1" placeholder="ask shinscan…" autofocus></textarea>
+        <button class="send" id="goBtn" disabled title="Send message (Enter)">↵</button>
       </div>
-      <button class="send" id="goBtn" disabled>↵</button>
     </div>
 
-    <!-- Past-chats overlay (slides in over .panel) -->
+    <!-- Past-chats overlay -->
     <div class="chats-overlay" id="chatsOverlay" aria-hidden="true">
       <div class="chats-head">
         <span class="title"><b>chats</b> // history</span>

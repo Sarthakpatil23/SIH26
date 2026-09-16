@@ -78,6 +78,18 @@ export interface PageStats {
   iframes: number;
   total: number;
   textChars: number;
+  canvasCount?: number;
+  canvasCoverageRatio?: number;
+}
+
+export interface DomSufficiencyReport {
+  isSufficient: boolean;
+  score: number; // 0.0 to 1.0 (1.0 = rich DOM, 0.0 = completely inaccessible / empty / pure canvas)
+  hasDominantCanvas: boolean;
+  canvasCoverageRatio: number;
+  canvasCount: number;
+  interactiveDensity: number;
+  reasons: string[];
 }
 
 export interface PageInfo {
@@ -97,6 +109,7 @@ export interface PageSnapshot {
   capturedAt: number;
   info: PageInfo;
   stats: PageStats;
+  sufficiency?: DomSufficiencyReport;
   elements: IndexedElement[];
   /** Recent announcements collected since the previous snapshot
    *  (focus changes + aria-live region updates). */
@@ -300,6 +313,11 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
     let totalElements = 0;
     let textChars = 0;
     let iframeCount = 0;
+    let canvasCount = 0;
+    let totalCanvasAreaInViewport = 0;
+    const vpW = window.innerWidth || 1280;
+    const vpH = window.innerHeight || 800;
+    const vpArea = Math.max(1, vpW * vpH);
 
     function walk(root) {
       if (!root) return;
@@ -311,6 +329,17 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
         if (node.nodeType === 1) {
           totalElements++;
           const tag = node.tagName ? node.tagName.toLowerCase() : '';
+          if (tag === 'canvas') {
+            canvasCount++;
+            try {
+              const cr = node.getBoundingClientRect();
+              if (cr.width > 0 && cr.height > 0) {
+                const overlapW = Math.max(0, Math.min(cr.right, vpW) - Math.max(cr.left, 0));
+                const overlapH = Math.max(0, Math.min(cr.bottom, vpH) - Math.max(cr.top, 0));
+                totalCanvasAreaInViewport += (overlapW * overlapH);
+              }
+            } catch (_) {}
+          }
           if (tag === 'iframe' || tag === 'frame') {
             iframeCount++;
             try {
@@ -449,12 +478,51 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
       window.innerHeight
     );
 
+    const canvasCoverageRatio = Math.min(1.0, Math.round((totalCanvasAreaInViewport / vpArea) * 100) / 100);
+    const hasDominantCanvas = canvasCoverageRatio >= 0.25;
+
+    // Evaluate DOM Sufficiency
+    const domReasons = [];
+    let domScore = 1.0;
+
+    if (totalElements < 10) {
+      domScore -= 0.6;
+      domReasons.push('DOM appears nearly empty (<10 elements)');
+    }
+    if (hasDominantCanvas) {
+      domScore -= 0.5;
+      domReasons.push('Dominant canvas covers ' + Math.round(canvasCoverageRatio * 100) + '% of viewport (Google Sheets, Figma, Canva, or WebGL detected)');
+    }
+    if (candidates.length < 6 && totalElements > 20) {
+      domScore -= 0.3;
+      domReasons.push('Very few interactive elements (' + candidates.length + ') found on rendered page');
+    }
+    domScore = Math.max(0.0, Math.min(1.0, Math.round(domScore * 100) / 100));
+
+    // Sufficient if score >= 0.6 and not dominated by an inaccessible canvas
+    const isSufficient = domScore >= 0.6 && !(hasDominantCanvas && candidates.length < 35);
+    if (!isSufficient && domReasons.length === 0) {
+      domReasons.push('Low DOM actionability score (' + domScore + ')');
+    }
+
+    const sufficiency = {
+      isSufficient,
+      score: domScore,
+      hasDominantCanvas,
+      canvasCoverageRatio,
+      canvasCount,
+      interactiveDensity: candidates.length,
+      reasons: domReasons,
+    };
+
     const stats = {
       interactive: items.length,
       links, inputs, buttons,
       iframes: iframeCount,
       total: totalElements,
       textChars,
+      canvasCount,
+      canvasCoverageRatio,
     };
 
     const isEmpty = totalElements < 10;
@@ -476,7 +544,7 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
       announcements = (window.__browy_ax && window.__browy_ax.drain()) || [];
     } catch (_) {}
 
-    return JSON.stringify({ info, stats, items, announcements });
+    return JSON.stringify({ info, stats, sufficiency, items, announcements });
   })()`;
 
   const { result } = await cdp.send('Runtime.evaluate', {
@@ -486,7 +554,7 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
   }) as { result: { value?: string } };
 
   const raw = String(result?.value ?? '{}');
-  let parsed: { info?: any; stats?: any; items?: IndexedElement[]; announcements?: PageAnnouncement[] };
+  let parsed: { info?: any; stats?: any; sufficiency?: DomSufficiencyReport; items?: IndexedElement[]; announcements?: PageAnnouncement[] };
   try { parsed = JSON.parse(raw); } catch { parsed = {}; }
 
   const info: PageInfo = {
@@ -514,11 +582,14 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
     iframes: parsed.stats?.iframes || 0,
     total: parsed.stats?.total || 0,
     textChars: parsed.stats?.textChars || 0,
+    canvasCount: parsed.stats?.canvasCount || 0,
+    canvasCoverageRatio: parsed.stats?.canvasCoverageRatio || 0,
   };
 
   const snap: PageSnapshot = {
     capturedAt: Date.now(),
     info, stats,
+    sufficiency: parsed.sufficiency as DomSufficiencyReport | undefined,
     elements: parsed.items || [],
     announcements: Array.isArray(parsed.announcements) ? parsed.announcements as PageAnnouncement[] : [],
   };
@@ -583,6 +654,12 @@ export function serializeSnapshot(snap: PageSnapshot, opts?: { maxChars?: number
     `${snap.stats.buttons} buttons, ${snap.stats.inputs} inputs, ${snap.stats.iframes} iframes, ` +
     `${snap.stats.total} total elements</page_stats>`
   );
+
+  // <dom_sufficiency> — high-signal note if DOM actionability is constrained
+  if (snap.sufficiency && !snap.sufficiency.isSufficient) {
+    const reasons = snap.sufficiency.reasons.join('; ');
+    lines.push(`<dom_sufficiency status="insufficient" canvas="${Math.round(snap.sufficiency.canvasCoverageRatio * 100)}%" reasons="${reasons}">DOM has limited actionability. Use vision fallback / coordinates if target is not in the snapshot.</dom_sufficiency>`);
+  }
 
   // <page_info>
   const above = snap.info.pagesAbove.toFixed(1);
@@ -687,7 +764,7 @@ export async function resolveIndex(cdp: CdpLike, index: number): Promise<Resolve
           }
         }
       }
-      return JSON.stringify({ found: false, reason: 'no element with data-browy-id=${index} (snapshot may be stale — call inspect_page again)' });
+      return JSON.stringify({ found: false, reason: 'no element with data-browy-id=' + index + ' (snapshot may be stale, or target lives inside a <canvas>/graphic — call inspect_page or use look_at_screen + click_coordinate)' });
     }
     return resolve(el);
     function resolve(el) {

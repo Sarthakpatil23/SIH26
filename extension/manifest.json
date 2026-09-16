@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Browy",
+  "name": "Shinscan",
   "version": "0.1.6",
   "description": "The AI agent that lives in your browser. Drives real tabs through chat. Side panel + DevTools REPL.",
   "homepage_url": "https://browyhq.github.io/",
@@ -11,7 +11,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Open Browy",
+    "default_title": "Open Shinscan",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

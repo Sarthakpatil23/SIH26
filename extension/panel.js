@@ -315,7 +315,7 @@ async function cmdCopy() {
 
 function cmdVersion() {
   const m = chrome.runtime.getManifest();
-  appendRow('info', '→', 'browy ' + m.version);
+  appendRow('info', '→', 'shinscan ' + m.version);
   appendRow('dim', '·', 'model: ' + (sessionModel || '—'));
 }
 
@@ -397,7 +397,7 @@ function cmdExport() {
     const url = URL.createObjectURL(blob);
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const a = document.createElement('a');
-    a.href = url; a.download = 'browy-cli-' + ts + '.txt';
+    a.href = url; a.download = 'shinscan-cli-' + ts + '.txt';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     appendRow('ok', '✓', 'exported ' + lines.length + ' line' + (lines.length === 1 ? '' : 's'));
@@ -553,13 +553,13 @@ port.onMessage.addListener((msg) => {
       setBusy(false);
       break;
     case '__host_missing':
-      appendRow('err', '✗', 'browy backend not installed. install: https://browyhq.github.io/install/');
+      appendRow('err', '✗', 'shinscan backend not installed. install: https://browyhq.github.io/install/');
       hostReady = false;
       sessionStarted = false;
       setBusy(false);
       break;
     case '__host_stale':
-      appendRow('err', '✗', 'browy backend installed but does not trust this extension. upgrade: https://browyhq.github.io/install/');
+      appendRow('err', '✗', 'shinscan backend installed but does not trust this extension. upgrade: https://browyhq.github.io/install/');
       hostReady = false;
       sessionStarted = false;
       setBusy(false);
@@ -895,7 +895,7 @@ chrome.devtools.network.onNavigated.addListener(() => {
 // ── Boot ─────────────────────────────────────────────────────────────────
 
 (function boot() {
-  appendRow('banner', '~', 'Browy CLI — type /help for commands');
+  appendRow('banner', '~', 'Shinscan CLI — type /help for commands');
   refreshPageMeta();
   $cmd.focus();
 })();
