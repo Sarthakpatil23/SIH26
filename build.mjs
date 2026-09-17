@@ -23,7 +23,7 @@ async function build() {
     minify: PROD,
     legalComments: 'none',
     banner: { js: '' },
-    external: ['playwright-core', 'ws', '@azure/identity', '@github/copilot-sdk'],
+    external: ['playwright-core', 'ws', '@azure/identity', '@github/copilot-sdk', 'sharp', 'onnxruntime-web'],
     logLevel: 'info',
   });
 

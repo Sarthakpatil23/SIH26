@@ -11,6 +11,7 @@ import {
   evaluateDomSufficiency, captureVisionFrame, formatVisionContextBlock,
   type VisionFrame,
 } from './vision-fallback.js';
+import { sanitizeUrl, redactText, PrivacyGate } from '../privacy/index.js';
 
 // Copilot SDK is CJS — use require
 import { createRequire } from 'module';
@@ -68,7 +69,7 @@ function isBrowySession(s: any): boolean {
 function cleanChatSummary(s: string | undefined): string | undefined {
   if (!s) return s;
   let out = s;
-  const tags = ['browser_context', 'page_snapshot', 'recent_actions', 'page_stats', 'page_info', 'vision_context', 'dom_sufficiency'];
+  const tags = ['browser_context', 'page_snapshot', 'recent_actions', 'page_stats', 'page_info', 'vision_context', 'dom_sufficiency', 'redaction_manifest'];
   // 1. Strip closed pairs.
   for (const t of tags) {
     out = out.replace(new RegExp(`<${t}>[\\s\\S]*?</${t}>`, 'g'), '');
@@ -189,7 +190,11 @@ const SYSTEM_PROMPT = `You are Shinscan — a browser-automation copilot that li
     - **Always attempt DOM first:** For standard HTML pages (GitHub, Reddit, Wikipedia, forms, blogs, search engines), interact through DOM indexed tools (\`click_index\`, \`type_index\`, \`select_index\`). It is faster, deterministic, and highly structured.
     - **Dynamic Vision Fallback:** If the page content is rendered on a \`<canvas>\` (e.g. Google Sheets grid, Figma artboards, Canva, WebGL), or the target element cannot be found in the DOM snapshot, or a DOM action has no observable effect, automatically switch to Vision.
     - **Combine Context:** On hybrid pages (like Google Sheets), combine both: use DOM indices \`[N]\` for top menus ("File", "Insert", "Format") and formula inputs, and use \`type_coordinate\` / \`click_coordinate\` for the grid cells (e.g. cell A1).
-    - **Coordinate System:** Coordinates are in viewport pixels where \`(0, 0)\` is top-left and \`(vw, vh)\` is bottom-right. When \`<vision_context>\` is present, inspect the image to locate visual coordinates.
+    - Coordinate System: Coordinates are in viewport pixels where \`(0, 0)\` is top-left and \`(vw, vh)\` is bottom-right. When \`<vision_context>\` is present, inspect the image to locate visual coordinates.
+21. **Privacy-Preserving Operation:**
+    - Sensitive personal information (passwords, payment cards, personal emails, phone numbers, gov IDs) has been sanitized locally into semantic placeholders like [EMAIL], [PASSWORD], [CARD_NUMBER].
+    - In visual frames, sensitive areas are obscured with [REDACTED: TYPE] badges.
+    - Plan and execute actions using indexed controls or coordinates. Never ask the user to paste passwords or credentials into the chat.
 
 # OUTPUT STYLE
 - Default to short, direct answers. Show only the result the user asked for; don't narrate every tool call.
@@ -569,6 +574,26 @@ export class Agent {
         parameters: tool.def.parameters,
         handler: async (args: Record<string, unknown>) => {
           const freshCtx = self.getBrowserContext();
+          freshCtx.onVisionCaptured = (frame: any) => {
+            if (frame.originalBase64) {
+              self.emit({
+                type: 'privacy_comparison',
+                originalBase64: frame.originalBase64,
+                sanitizedBase64: frame.base64,
+                mimeType: frame.mimeType,
+                redactedCount: frame.sensitiveBoxes?.length || 0,
+                detectedElementsCount: frame.detectedElements?.length || 0,
+                provider: frame.visionInference?.provider || 'wasm',
+                inferenceMs: frame.visionInference?.durationMs || 0,
+                manifest: (frame.sensitiveBoxes || []).map((b: any) => ({
+                  type: b.type,
+                  label: b.label || (b.type === 'person_name' ? 'NAME' : b.type.toUpperCase()),
+                  box: { x: b.x, y: b.y, w: b.w, h: b.h },
+                  coordType: b.coordType || 'css',
+                })),
+              });
+            }
+          };
           // Stable id so UI can match start↔end of the same call
           const id = `${tool.def.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -862,14 +887,19 @@ export class Agent {
       const extras = await this.captureLiveContext(cdpForCtx);
       const contextLines: string[] = [];
       if (ctx.url) {
+        const sanitizedUrl = sanitizeUrl(ctx.url);
+        const sanitizedTitle = redactText(ctx.title || 'untitled').sanitized;
         contextLines.push(`Browser:    ${ctx.brand}`);
-        contextLines.push(`Active tab: ${JSON.stringify(ctx.title || 'untitled')}`);
-        contextLines.push(`URL:        ${ctx.url}`);
+        contextLines.push(`Active tab: ${JSON.stringify(sanitizedTitle)}`);
+        contextLines.push(`URL:        ${sanitizedUrl}`);
         contextLines.push(`Open tabs:  ${ctx.tabCount}`);
         if (extras.viewport) contextLines.push(`Viewport:   ${extras.viewport}`);
         if (extras.scroll)   contextLines.push(`Scroll:     ${extras.scroll}`);
         if (extras.readyState) contextLines.push(`Ready:      ${extras.readyState}`);
-        if (extras.selectionPreview) contextLines.push(`Selection:  ${extras.selectionPreview}`);
+        if (extras.selectionPreview) {
+          const sanitizedSelection = redactText(extras.selectionPreview).sanitized;
+          contextLines.push(`Selection:  ${sanitizedSelection}`);
+        }
       }
 
       // Indexed snapshot — the agent's "eyes". One CDP eval; tags interactive
@@ -892,7 +922,7 @@ export class Agent {
       let visionFrame: VisionFrame | null = null;
       if (visionDecision.useVision && cdpForCtx && isInteractivePage) {
         try {
-          visionFrame = await captureVisionFrame(cdpForCtx);
+          visionFrame = await captureVisionFrame(cdpForCtx, { sensitiveBoxes: pageSnap?.sensitiveBoxes });
           if (visionFrame) {
             visionContextBlock = `\n${formatVisionContextBlock(visionFrame, visionDecision)}\n`;
             this.emit({
@@ -900,6 +930,31 @@ export class Agent {
               event: 'vision_fallback_triggered',
               result: visionDecision.reason,
             });
+            if (visionFrame.visionInference) {
+              this.emit({
+                type: 'activity',
+                event: 'onnx_vision_inference',
+                result: `Detected ${visionFrame.detectedElements?.length || 0} UI controls & ${visionFrame.sensitiveBoxes?.length || 0} sensitive regions via ${visionFrame.visionInference.provider.toUpperCase()} (${visionFrame.visionInference.durationMs}ms)`,
+              });
+            }
+            if (visionFrame.originalBase64) {
+              this.emit({
+                type: 'privacy_comparison',
+                originalBase64: visionFrame.originalBase64,
+                sanitizedBase64: visionFrame.base64,
+                mimeType: visionFrame.mimeType,
+                redactedCount: visionFrame.sensitiveBoxes?.length || 0,
+                detectedElementsCount: visionFrame.detectedElements?.length || 0,
+                provider: visionFrame.visionInference?.provider || 'wasm',
+                inferenceMs: visionFrame.visionInference?.durationMs || 0,
+                manifest: (visionFrame.sensitiveBoxes || []).map((b) => ({
+                  type: b.type,
+                  label: b.label || (b.type === 'person_name' ? 'NAME' : b.type.toUpperCase()),
+                  box: { x: b.x, y: b.y, w: b.w, h: b.h },
+                  coordType: b.coordType || 'css',
+                })),
+              });
+            }
           }
         } catch { /* fail-soft */ }
       }
@@ -911,9 +966,24 @@ export class Agent {
       // Put the user's actual text FIRST so the SDK's session-summary (which
       // truncates to ~100 chars) captures the user's intent rather than our
       // injected scaffolding. The model sees the same content either way.
-      const prompt = contextBlock
+      const rawPrompt = contextBlock
         ? `${userText}\n\n${contextBlock}`
         : userText;
+
+      // ── Pre-Flight Privacy Firewall Gate ────────────────────────────────────
+      const allSensitiveBoxes = [
+        ...(pageSnap?.sensitiveBoxes || []),
+        ...(visionFrame?.sensitiveBoxes || []),
+      ];
+      const certified = PrivacyGate.certifyPayload(rawPrompt, allSensitiveBoxes);
+      const prompt = certified.certifiedPrompt;
+      if (certified.manifest.totalRedacted > 0) {
+        this.emit({
+          type: 'activity',
+          event: 'privacy_redaction_applied',
+          result: `Sanitized ${certified.manifest.totalRedacted} sensitive items locally before cloud transmission`,
+        });
+      }
 
       // ── Custom provider route (OmniRoute, DeepSeek, OpenAI-compatible) ──
       if (activeProvider) {

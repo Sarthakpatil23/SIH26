@@ -3,6 +3,7 @@
 
 import type { CustomProviderConfig, ToolCallRecord, WSMessage } from '../types.js';
 import type { ToolHandler, BrowserToolContext } from './tools/browser.js';
+import { redactText } from '../privacy/index.js';
 
 export interface ChatTurnOptions {
   config: CustomProviderConfig;
@@ -165,8 +166,26 @@ export async function executeCustomProviderTurn(
   };
   const toolContext: BrowserToolContext = {
     ...browserContext,
-    onVisionCaptured: (frame) => {
+    onVisionCaptured: (frame: any) => {
       visionState.pendingFrame = frame;
+      if (frame.originalBase64) {
+        emit({
+          type: 'privacy_comparison',
+          originalBase64: frame.originalBase64,
+          sanitizedBase64: frame.base64,
+          mimeType: frame.mimeType,
+          redactedCount: frame.sensitiveBoxes?.length || 0,
+          detectedElementsCount: frame.detectedElements?.length || 0,
+          provider: frame.visionInference?.provider || 'wasm',
+          inferenceMs: frame.visionInference?.durationMs || 0,
+          manifest: (frame.sensitiveBoxes || []).map((b: any) => ({
+            type: b.type,
+            label: b.label || (b.type === 'person_name' ? 'NAME' : b.type.toUpperCase()),
+            box: { x: b.x, y: b.y, w: b.w, h: b.h },
+            coordType: b.coordType || 'css',
+          })),
+        });
+      }
     },
   };
 
@@ -349,11 +368,11 @@ export async function executeCustomProviderTurn(
         durationMs: toolDuration,
       });
 
-      // Append tool result message for the model
+      // Append tool result message for the model (sanitized to prevent PII leakage)
       messages.push({
         role: 'tool',
         tool_call_id: tc.id,
-        content: toolResult,
+        content: redactText(toolResult).sanitized,
       });
     }
 

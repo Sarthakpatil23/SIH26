@@ -6,7 +6,12 @@
 // this engine triggers vision fallback, captures a high-efficiency screenshot, and formats combined context.
 
 import type { PageSnapshot, DomSufficiencyReport } from './page-snapshot.js';
+import { buildDomSensitiveScannerScript, getKnownUserTokens } from './page-snapshot.js';
 import type { ToolCallRecord } from '../types.js';
+import type { SensitiveBoundingBox } from '../privacy/types.js';
+import { redactVisualFrame } from '../privacy/visual-redactor.js';
+import type { VisionInferenceResult, DetectedElement } from '../vision/types.js';
+import { getUIDetector, formatDetectedElementsBlock } from '../vision/index.js';
 
 export interface VisionDecision {
   useVision: boolean;
@@ -17,11 +22,15 @@ export interface VisionDecision {
 
 export interface VisionFrame {
   base64: string;
+  originalBase64?: string;
   mimeType: string;
   width: number;
   height: number;
   dpr: number;
   capturedAt: number;
+  visionInference?: VisionInferenceResult;
+  detectedElements?: DetectedElement[];
+  sensitiveBoxes?: SensitiveBoundingBox[];
 }
 
 interface CdpLike {
@@ -33,8 +42,9 @@ const VISUAL_INTENT_PATTERNS = [
   /\b(cell\s+[a-z]{1,3}\d{1,5})\b/i,          // e.g. "cell A1", "cell B5"
   /\b(spreadsheet|sheet\s+grid)\b/i,           // spreadsheets
   /\b(canvas|board|artboard|drawing)\b/i,      // canvas apps (Figma, Canva, Excalidraw)
-  /\b(look\s+at\s+(the\s+)?(screen|page|image)|screenshot)\b/i,
-  /\b(what\s+color|visual(ly)?|diagram|chart|graph)\b/i,
+  /\b(look|see|view|check|inspect|capture|show|what('s|\s+is)?)\s+.*?\b(screen|page|viewport|image|display|ui)\b/i,
+  /\b(screenshot|snapshot|visual(ly)?|diagram|chart|graph)\b/i,
+  /\b(what\s+do\s+you\s+see|what\s+can\s+you\s+see)\b/i,
   /\b(click\s+(at|on)\s+coordinates?)\b/i,
 ];
 
@@ -131,7 +141,7 @@ export function evaluateDomSufficiency(
  */
 export async function captureVisionFrame(
   cdp: CdpLike,
-  opts?: { quality?: number; format?: 'jpeg' | 'png' },
+  opts?: { quality?: number; format?: 'jpeg' | 'png'; sensitiveBoxes?: SensitiveBoundingBox[] },
 ): Promise<VisionFrame | null> {
   try {
     const format = opts?.format || 'jpeg';
@@ -153,14 +163,65 @@ export async function captureVisionFrame(
     ]);
 
     const metrics = JSON.parse(String(metricsResult?.result?.value ?? '{"width":1280,"height":800,"dpr":1}'));
+    const rawBase64 = screenshotResult.data;
+    let finalBase64 = rawBase64;
+    let finalMimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const vpW = Number(metrics.width) || 1280;
+    const vpH = Number(metrics.height) || 800;
+
+    // Run Local Vision Model (ONNX Runtime Web: WebGPU / WASM SIMD)
+    let visionInference: VisionInferenceResult | undefined;
+    const combinedSensitiveBoxes: SensitiveBoundingBox[] = [...(opts?.sensitiveBoxes || [])];
+
+    // If caller didn't supply sensitive boxes, dynamically scan DOM live for names, avatars, and PII
+    if (combinedSensitiveBoxes.length === 0) {
+      try {
+        const domScanResult = await cdp.send('Runtime.evaluate', {
+          expression: buildDomSensitiveScannerScript(getKnownUserTokens()),
+          returnByValue: true,
+          timeout: 2000,
+        }) as { result?: { value?: SensitiveBoundingBox[] } };
+        if (Array.isArray(domScanResult?.result?.value)) {
+          combinedSensitiveBoxes.push(...domScanResult.result.value);
+        }
+      } catch {}
+    }
+
+    try {
+      const detector = getUIDetector();
+      visionInference = await detector.detect(finalBase64);
+      if (visionInference.sensitiveBoxes?.length) {
+        combinedSensitiveBoxes.push(...visionInference.sensitiveBoxes);
+      }
+    } catch (detErr) {
+      console.warn('[browy-vision] Local UI detection non-fatal error:', detErr);
+    }
+
+    // Apply local visual redaction if sensitive bounding boxes are present (from DOM or Vision Model)
+    if (combinedSensitiveBoxes.length > 0) {
+      const redacted = await redactVisualFrame({
+        base64: finalBase64,
+        mimeType: finalMimeType,
+        viewportWidth: vpW,
+        viewportHeight: vpH,
+        dpr: Number(metrics.dpr) || 1,
+        boxes: combinedSensitiveBoxes,
+      });
+      finalBase64 = redacted.base64;
+      finalMimeType = redacted.mimeType;
+    }
 
     return {
-      base64: screenshotResult.data,
-      mimeType: format === 'jpeg' ? 'image/jpeg' : 'image/png',
-      width: Number(metrics.width) || 1280,
-      height: Number(metrics.height) || 800,
+      base64: finalBase64,
+      originalBase64: rawBase64,
+      mimeType: finalMimeType,
+      width: vpW,
+      height: vpH,
       dpr: Number(metrics.dpr) || 1,
       capturedAt: Date.now(),
+      visionInference,
+      detectedElements: visionInference?.detectedElements || [],
+      sensitiveBoxes: combinedSensitiveBoxes,
     };
   } catch (err) {
     return null;
@@ -176,6 +237,15 @@ export function formatVisionContextBlock(frame: VisionFrame, decision: VisionDec
     '<vision_context>',
     `Resolution: ${frame.width}x${frame.height} px (Device Pixel Ratio: ${frame.dpr})`,
     `Reason for vision fallback: ${decision.reason}`,
+  ];
+
+  if (frame.visionInference) {
+    lines.push(
+      `Local Vision Engine: ONNX Runtime Web [${frame.visionInference.provider.toUpperCase()}] (${frame.visionInference.durationMs}ms inference)`
+    );
+  }
+
+  lines.push(
     '',
     '## COMBINED DOM + VISION INSTRUCTIONS:',
     '1. A visual screenshot of the current viewport is attached to this turn.',
@@ -185,7 +255,19 @@ export function formatVisionContextBlock(frame: VisionFrame, decision: VisionDec
     '   - click_coordinate(x, y): click or double-click exact pixel coordinates.',
     '   - type_coordinate(x, y, text): focus coordinate and type text (ideal for spreadsheet cells).',
     '   - drag_coordinate(fromX, fromY, toX, toY): drag across visual coordinates.',
-    '</vision_context>',
-  ];
+    '5. Sensitive visual areas and credentials have been redacted locally ([REDACTED: TYPE] overlays); target controls without reading private data.',
+    '</vision_context>'
+  );
+
+  // Append visually detected UI elements block if any were found
+  if (frame.detectedElements && frame.detectedElements.length > 0) {
+    const elBlock = formatDetectedElementsBlock(
+      frame.detectedElements,
+      frame.visionInference?.provider || 'wasm',
+      frame.visionInference?.durationMs || 0
+    );
+    lines.push('', elBlock);
+  }
+
   return lines.join('\n');
 }

@@ -890,15 +890,28 @@ register({
   },
   async run(_args, ctx) {
     const { captureVisionFrame } = await import('../vision-fallback.js');
-    const frame = await captureVisionFrame(ctx.cdp as any);
+    let sensitiveBoxes: any[] | undefined;
+    try {
+      const snap = await ensureSnapshot(ctx.cdp as any, 0);
+      sensitiveBoxes = snap?.sensitiveBoxes;
+    } catch {}
+    const frame = await captureVisionFrame(ctx.cdp as any, { sensitiveBoxes });
     if (!frame) return JSON.stringify({ error: 'Failed to capture visual screenshot from browser.' });
     if (ctx.onVisionCaptured) {
       ctx.onVisionCaptured(frame);
     }
     return JSON.stringify({
       success: true,
-      message: 'Visual screenshot captured. Vision context updated for this turn.',
+      message: 'Visual screenshot captured and analyzed with local ONNX vision engine.',
       viewport: { width: frame.width, height: frame.height, dpr: frame.dpr },
+      detectedElements: frame.detectedElements?.map((el) => ({
+        id: el.id,
+        type: el.classType,
+        confidence: el.confidence,
+        box: el.box,
+        action: el.actionHint,
+      })) || [],
+      sensitiveRegionsProtected: frame.sensitiveBoxes?.length || 0,
       instruction: `Specify coordinates in [0..${frame.width}, 0..${frame.height}] using click_coordinate(x, y) or type_coordinate(x, y, text).`,
     });
   },

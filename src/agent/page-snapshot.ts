@@ -16,6 +16,187 @@
 //
 // Modeled on browser-use's DomService + DOMTreeSerializer.
 
+import type { SensitiveBoundingBox } from '../privacy/types.js';
+import { inspectElementPrivacy, redactText } from '../privacy/pii-detector.js';
+import os from 'os';
+import { execSync } from 'child_process';
+
+/** Retrieve known local user identity tokens to guarantee personal name redaction on local profiles. */
+export function getKnownUserTokens(): string[] {
+  const tokens = new Set<string>();
+  try {
+    const u = os.userInfo?.()?.username || process.env.USERNAME || process.env.USER;
+    if (u && u.length >= 3) tokens.add(u);
+  } catch {}
+  try {
+    const gitUser = execSync('git config user.name', { encoding: 'utf8', timeout: 500 }).trim();
+    if (gitUser && gitUser.length >= 3) {
+      tokens.add(gitUser);
+      gitUser.split(/\s+/).forEach((t) => {
+        if (t.length >= 3 && !/^(admin|user|test|root|null|undefined)$/i.test(t)) tokens.add(t);
+      });
+    }
+  } catch {}
+  return Array.from(tokens);
+}
+
+/** Build in-page DOM scanner script to find personal names, avatars, and name form inputs. */
+export function buildDomSensitiveScannerScript(userTokens: string[] = []): string {
+  const tokensJson = JSON.stringify(userTokens || []);
+  return `(() => {
+    const domSensitiveBoxes = [];
+    try {
+      const userTokens = ${tokensJson};
+      const vpW = window.innerWidth || 1280;
+      const vpH = window.innerHeight || 800;
+
+      const isElVisible = (el) => {
+        if (!el || el.nodeType !== 1) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return false;
+        const cs = window.getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < 0.05) return false;
+        return true;
+      };
+
+      const pushBox = (r, type, label) => {
+        if (!r || r.width < 2 || r.height < 2) return;
+        if (r.bottom <= 0 || r.top >= vpH || r.right <= 0 || r.left >= vpW) return;
+        domSensitiveBoxes.push({
+          x: Math.round(r.left),
+          y: Math.round(r.top),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+          type: type || 'person_name',
+          label: label || 'NAME',
+          coordType: 'css',
+        });
+      };
+
+      // 1. Form Inputs, Textareas, Selects
+      document.querySelectorAll('input, textarea, select').forEach((el) => {
+        if (!isElVisible(el)) return;
+        const ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+        const nm = (el.getAttribute('name') || '').toLowerCase();
+        const id = (el.id || '').toLowerCase();
+        const ph = (el.getAttribute('placeholder') || '').toLowerCase();
+        const al = (el.getAttribute('aria-label') || '').toLowerCase();
+
+        const isNameField = ac === 'name' || ac.includes('given-name') || ac.includes('family-name') ||
+          ac.includes('nickname') || ac.includes('username') ||
+          /(?:^|[-_])(first[-_]?name|last[-_]?name|full[-_]?name|fname|lname|user[-_]?name|display[-_]?name|customer[-_]?name|author[-_]?name|cardholder[-_]?name|profile[-_]?name)(?:$|[-_])/i.test(nm) ||
+          /(?:^|[-_])(first[-_]?name|last[-_]?name|full[-_]?name|fname|lname|user[-_]?name|display[-_]?name|customer[-_]?name|author[-_]?name|cardholder[-_]?name|profile[-_]?name)(?:$|[-_])/i.test(id) ||
+          /\\b(?:first\\s+name|last\\s+name|full\\s+name|username|display\\s+name|your\\s+name)\\b/i.test(ph) ||
+          /\\b(?:first\\s+name|last\\s+name|full\\s+name|username|display\\s+name|your\\s+name)\\b/i.test(al);
+
+        if (isNameField) {
+          pushBox(el.getBoundingClientRect(), 'person_name', 'NAME');
+        }
+      });
+
+      // 2. Avatar / Profile Pictures
+      document.querySelectorAll('img, svg, [role="img"]').forEach((el) => {
+        if (!isElVisible(el)) return;
+        const cls = (el.className && typeof el.className === 'string' ? el.className : '').toLowerCase();
+        const alt = (el.getAttribute('alt') || '').toLowerCase();
+        const id = (el.id || '').toLowerCase();
+        const src = (el.getAttribute('src') || '').toLowerCase();
+        const testId = (el.getAttribute('data-testid') || '').toLowerCase();
+
+        const isAvatar = /avatar|profile[-_]?photo|profile[-_]?picture|profile[-_]?image|user[-_]?avatar|user[-_]?photo|author[-_]?img|presence-entity/i.test(cls) ||
+          /avatar|profile/i.test(alt) || /avatar|profile/i.test(id) || /avatar|profile/i.test(testId) ||
+          /profile_images|avatars|user_photos/i.test(src);
+
+        if (isAvatar) {
+          const r = el.getBoundingClientRect();
+          if (r.width >= 14 && r.height >= 14 && r.width <= 700 && r.height <= 700) {
+            pushBox(r, 'person_name', 'AVATAR');
+          }
+        }
+      });
+
+      // 3. Headings & Profile / Author / User Elements
+      const profileAndHeadingEls = document.querySelectorAll(
+        'h1, h2, h3, [role="heading"], ' +
+        '[class*="name" i], [class*="user" i], [class*="author" i], [class*="profile" i], ' +
+        '[class*="member" i], [class*="byline" i], [class*="account" i], [class*="owner" i], ' +
+        '[id*="name" i], [id*="user" i], [id*="author" i], [id*="profile" i], ' +
+        '[data-testid*="name" i], [data-testid*="user" i], [itemprop="name"], [itemprop="author"]'
+      );
+
+      const SKIP_WORDS = new Set([
+        'name', 'user', 'username', 'profile', 'edit', 'account', 'menu', 'search', 'home',
+        'settings', 'login', 'sign in', 'feed', 'notifications', 'jobs', 'messaging', 'terms',
+        'privacy', 'help', 'about', 'contact', 'dashboard', 'overview', 'projects', 'repositories',
+        'pricing', 'enterprise', 'products', 'solutions', 'community', 'company', 'submit', 'cancel',
+        'delete', 'save', 'close', 'back', 'next', 'all', 'view', 'share', 'like', 'comment',
+        'repost', 'send', 'follow', 'connect', 'message', 'more', 'filter', 'sort', 'open', 'details',
+        'my network', 'try premium', 'premium', 'for business', 'business', 'work'
+      ]);
+
+      profileAndHeadingEls.forEach((el) => {
+        if (!isElVisible(el)) return;
+        if (el.children.length > 3) return;
+        const txt = (el.innerText || el.textContent || '').trim();
+        if (!txt || txt.length < 2 || txt.length > 70) return;
+        const lower = txt.toLowerCase();
+        if (SKIP_WORDS.has(lower)) return;
+
+        const matchesUser = userTokens.some((tok) => tok.length >= 3 && lower.includes(tok.toLowerCase()));
+        const isCapitalizedName = /^[A-Z][a-z]+(?:['’][a-zA-Z]+)?(?:\\s+[A-Z][a-z]+(?:['’][a-zA-Z]+)?){0,3}$/.test(txt);
+        const isContextualName = /\\b(?:name|full\\s*name|user(?:name)?|author|signed\\s+in\\s+as|logged\\s+in\\s+as|welcome(?:\\s+back)?)\\s*[:=–-]?\\s*[A-Z]/i.test(txt);
+
+        if (matchesUser || isCapitalizedName || isContextualName) {
+          pushBox(el.getBoundingClientRect(), 'person_name', 'NAME');
+        }
+      });
+
+      // 4. TreeWalker: Exact Substring Bounding Boxes across ALL text nodes
+      if (document.body) {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let textNode;
+        const NAME_PATTERN = /\\b(?:(?:name|full\\s*name|first\\s*name|last\\s*name|user(?:name)?|author|customer|cardholder|candidate|patient|profile|contact|account)\\s*[:=–-]\\s*([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,3})|(?:welcome(?:\\s+back)?,?|signed\\s+in\\s+as:?|logged\\s+in\\s+as:?|hello,?|hi,?|hey,?)\\s+([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,3})|(?:Mr\\.|Mrs\\.|Ms\\.|Miss|Dr\\.|Prof\\.|Sir|Madam)\\s+([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){1,3}))\\b/gi;
+
+        while ((textNode = walker.nextNode())) {
+          const str = textNode.nodeValue;
+          if (!str || str.length < 3) continue;
+
+          // A. User Known Tokens (e.g. Sarthak, Patil)
+          for (const tok of userTokens) {
+            if (tok.length < 3) continue;
+            let idx = -1;
+            const lowerStr = str.toLowerCase();
+            const lowerTok = tok.toLowerCase();
+            while ((idx = lowerStr.indexOf(lowerTok, idx + 1)) !== -1) {
+              try {
+                const range = document.createRange();
+                range.setStart(textNode, idx);
+                range.setEnd(textNode, idx + tok.length);
+                const r = range.getBoundingClientRect();
+                pushBox(r, 'person_name', 'NAME');
+              } catch (_) {}
+            }
+          }
+
+          // B. General Name Patterns
+          let m;
+          NAME_PATTERN.lastIndex = 0;
+          while ((m = NAME_PATTERN.exec(str)) !== null) {
+            try {
+              const range = document.createRange();
+              range.setStart(textNode, m.index);
+              range.setEnd(textNode, m.index + m[0].length);
+              const r = range.getBoundingClientRect();
+              pushBox(r, 'person_name', 'NAME');
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+    return domSensitiveBoxes;
+  })()`;
+}
+
 export interface IndexedElement {
   index: number;
   tag: string;
@@ -55,6 +236,10 @@ export interface IndexedElement {
    *  popovers / modals / autocomplete results. */
   isNew?: boolean;
   rect: { x: number; y: number; w: number; h: number };
+  isSensitive?: boolean;
+  sensitiveType?: string;
+  autocomplete?: string;
+  id?: string;
 }
 
 /** Screen-reader-style page announcement. Captured by an in-page MutationObserver
@@ -114,6 +299,7 @@ export interface PageSnapshot {
   /** Recent announcements collected since the previous snapshot
    *  (focus changes + aria-live region updates). */
   announcements: PageAnnouncement[];
+  sensitiveBoxes?: SensitiveBoundingBox[];
 }
 
 interface CdpLike {
@@ -449,6 +635,8 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
         type: el.getAttribute('type') || undefined,
         role: el.getAttribute('role') || undefined,
         name: el.getAttribute('name') || undefined,
+        id: el.id || undefined,
+        autocomplete: el.getAttribute('autocomplete') || undefined,
         ariaLabel,
         axName: axName && axName !== ariaLabel && axName !== text ? axName : undefined,
         placeholder,
@@ -538,13 +726,16 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
       isEmpty, isPlaceholder,
     };
 
+    // ── Universal Personal Name, Avatar & PII DOM Scanner ───────────────────
+    const domSensitiveBoxes = (${buildDomSensitiveScannerScript(getKnownUserTokens())})();
+
     // Drain accumulated a11y announcements since the last snapshot.
     let announcements = [];
     try {
       announcements = (window.__browy_ax && window.__browy_ax.drain()) || [];
     } catch (_) {}
 
-    return JSON.stringify({ info, stats, sufficiency, items, announcements });
+    return JSON.stringify({ info, stats, sufficiency, items, announcements, domSensitiveBoxes });
   })()`;
 
   const { result } = await cdp.send('Runtime.evaluate', {
@@ -554,7 +745,7 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
   }) as { result: { value?: string } };
 
   const raw = String(result?.value ?? '{}');
-  let parsed: { info?: any; stats?: any; sufficiency?: DomSufficiencyReport; items?: IndexedElement[]; announcements?: PageAnnouncement[] };
+  let parsed: { info?: any; stats?: any; sufficiency?: DomSufficiencyReport; items?: IndexedElement[]; announcements?: PageAnnouncement[]; domSensitiveBoxes?: SensitiveBoundingBox[] };
   try { parsed = JSON.parse(raw); } catch { parsed = {}; }
 
   const info: PageInfo = {
@@ -593,6 +784,105 @@ export async function capturePageSnapshot(cdp: CdpLike): Promise<PageSnapshot> {
     elements: parsed.items || [],
     announcements: Array.isArray(parsed.announcements) ? parsed.announcements as PageAnnouncement[] : [],
   };
+
+  // ── Client-Side Privacy Inspection & Dynamic Redaction ──────────────────
+  const sensitiveBoxes: SensitiveBoundingBox[] = [];
+  for (const el of snap.elements) {
+    const inspection = inspectElementPrivacy({
+      tag: el.tag,
+      type: el.type,
+      name: el.name,
+      id: el.id,
+      autocomplete: el.autocomplete,
+      placeholder: el.placeholder,
+      ariaLabel: el.ariaLabel || el.axName,
+      value: el.value,
+      text: el.text,
+    });
+
+    if (inspection.isSensitive) {
+      el.isSensitive = true;
+      el.sensitiveType = inspection.type;
+      el.value = inspection.sanitizedValue;
+      el.text = inspection.sanitizedText;
+      el.placeholder = inspection.sanitizedPlaceholder;
+      el.ariaLabel = inspection.sanitizedAriaLabel;
+
+      if (el.inViewport && el.rect.w > 0 && el.rect.h > 0) {
+        sensitiveBoxes.push({
+          x: el.rect.x,
+          y: el.rect.y,
+          w: el.rect.w,
+          h: el.rect.h,
+          type: inspection.type || 'password',
+          label: inspection.type === 'person_name' ? (el.placeholder === '[AVATAR]' ? 'AVATAR' : 'NAME') : (inspection.type || 'PII').toUpperCase(),
+          elementIndex: el.index,
+          coordType: 'css',
+        });
+      }
+    } else {
+      let foundMatch = false;
+      let matchType: any = 'pii';
+
+      if (el.value) {
+        const r = redactText(el.value);
+        if (r.matches.length > 0) {
+          el.value = r.sanitized;
+          el.isSensitive = true;
+          foundMatch = true;
+          matchType = r.matches[0].type;
+        }
+      }
+      if (el.text) {
+        const r = redactText(el.text);
+        if (r.matches.length > 0) {
+          el.text = r.sanitized;
+          el.isSensitive = true;
+          foundMatch = true;
+          matchType = r.matches[0].type;
+        }
+      }
+
+      if (foundMatch && el.inViewport && el.rect.w > 0 && el.rect.h > 0) {
+        sensitiveBoxes.push({
+          x: el.rect.x,
+          y: el.rect.y,
+          w: el.rect.w,
+          h: el.rect.h,
+          type: matchType,
+          label: matchType === 'person_name' ? 'NAME' : String(matchType).toUpperCase(),
+          elementIndex: el.index,
+          coordType: 'css',
+        });
+      }
+    }
+  }
+
+  // Merge direct DOM detected sensitive boxes (names, avatars, form fields)
+  if (Array.isArray(parsed.domSensitiveBoxes)) {
+    sensitiveBoxes.push(...parsed.domSensitiveBoxes);
+  }
+
+  // Deduplicate overlapping sensitive boxes
+  const uniqueBoxes: SensitiveBoundingBox[] = [];
+  for (const b of sensitiveBoxes) {
+    if (!b || b.w <= 0 || b.h <= 0) continue;
+    const isDup = uniqueBoxes.some((u) => {
+      const overlapW = Math.max(0, Math.min(b.x + b.w, u.x + u.w) - Math.max(b.x, u.x));
+      const overlapH = Math.max(0, Math.min(b.y + b.h, u.y + u.h) - Math.max(b.y, u.y));
+      const overlapArea = overlapW * overlapH;
+      const bArea = b.w * b.h;
+      return bArea > 0 && (overlapArea / bArea) > 0.8;
+    });
+    if (!isDup) uniqueBoxes.push(b);
+  }
+
+  for (const a of snap.announcements) {
+    if (a.text) {
+      a.text = redactText(a.text).sanitized;
+    }
+  }
+  snap.sensitiveBoxes = uniqueBoxes;
 
   // Diff against the immediately-prior snapshot (same URL only). Mark elements
   // whose signature wasn't in the previous set as `isNew`. browser-use uses the
@@ -699,6 +989,7 @@ function formatElement(el: IndexedElement): string {
   if (el.type) attrs.push(`type=${el.type}`);
   if (el.role) attrs.push(`role=${el.role}`);
   if (el.name) attrs.push(`name=${el.name}`);
+  if (el.isSensitive) attrs.push(`redacted=${el.sensitiveType || 'pii'}`);
   if (el.focused) attrs.push('focused');
   if (el.disabled) attrs.push('disabled');
   if (el.expanded === true)  attrs.push('expanded');

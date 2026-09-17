@@ -685,8 +685,207 @@ port.onMessage.addListener((msg) => {
       }
       break;
     }
+
+    case 'privacy.comparison': {
+      appendPrivacyComparisonCard(msg);
+      break;
+    }
   }
 });
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function appendPrivacyComparisonCard(msg) {
+  const stick = nearBottom();
+  const row = document.createElement('div');
+  row.className = 'row privacy-row';
+  const g = document.createElement('span');
+  g.className = 'glyph';
+  g.textContent = '🛡';
+  const b = document.createElement('span');
+  b.className = 'body';
+
+  const card = document.createElement('div');
+  card.className = 'privacy-panel-card';
+
+  const header = document.createElement('div');
+  header.className = 'privacy-panel-header';
+  header.innerHTML = `
+    <span>Privacy Boundary · Local Redaction</span>
+    <span class="badge">✓ Zero Cloud Leakage</span>
+  `;
+
+  const stats = document.createElement('div');
+  stats.className = 'privacy-panel-stats';
+  stats.innerHTML = `
+    <span>Model: <strong>${escapeHtml(msg.provider || 'ONNX/YOLO')}</strong></span>
+    <span>Inference: <strong>${msg.inferenceMs || 0}ms</strong></span>
+    <span>Redacted: <strong>${msg.redactedCount || 0}</strong> items</span>
+    <span>Detected: <strong>${msg.detectedElementsCount || 0}</strong> elements</span>
+  `;
+
+  const preview = document.createElement('div');
+  preview.className = 'privacy-panel-preview';
+
+  const origBox = document.createElement('div');
+  origBox.className = 'privacy-thumb-box';
+  origBox.innerHTML = `
+    <div class="thumb-title">
+      <span style="color:#3b82f6;">●</span> What You See (Raw)
+    </div>
+  `;
+  const origImg = document.createElement('img');
+  origImg.className = 'thumb-img';
+  origImg.alt = 'What You See (Raw Screenshot)';
+  origImg.src = `data:${msg.mimeType || 'image/jpeg'};base64,${msg.originalBase64}`;
+  origImg.title = 'Click to open full raw image in new tab';
+  origImg.addEventListener('click', () => {
+    openImageInNewTab(origImg.src, 'Browy - What You See (Raw)');
+  });
+  origBox.appendChild(origImg);
+
+  const sanBox = document.createElement('div');
+  sanBox.className = 'privacy-thumb-box';
+  sanBox.innerHTML = `
+    <div class="thumb-title">
+      <span style="color:#10b981;">●</span> What AI Sees (Redacted)
+    </div>
+  `;
+  const sanImg = document.createElement('img');
+  sanImg.className = 'thumb-img';
+  sanImg.alt = 'What AI Sees (Sanitized Screenshot)';
+  sanImg.src = `data:${msg.mimeType || 'image/jpeg'};base64,${msg.sanitizedBase64}`;
+  sanImg.title = 'Click to open full redacted image in new tab';
+  sanImg.addEventListener('click', () => {
+    openImageInNewTab(sanImg.src, 'Browy - What AI Sees (Redacted)');
+  });
+  sanBox.appendChild(sanImg);
+
+  const diffBox = document.createElement('div');
+  diffBox.className = 'privacy-thumb-box';
+  diffBox.innerHTML = `
+    <div class="thumb-title">
+      <span style="color:#ef4444;">●</span> Δ Visual Diff (Redacted)
+    </div>
+  `;
+  const diffImg = document.createElement('img');
+  diffImg.className = 'thumb-img';
+  diffImg.alt = 'Visual Diff (Redacted Delta)';
+  diffImg.title = 'Click to open full dynamically redacted diff in new tab';
+  diffBox.appendChild(diffImg);
+
+  // Render dynamically redacted diff canvas for DevTools
+  const diffCanvas = document.createElement('canvas');
+  const rawI = new Image();
+  const sanI = new Image();
+  let lCount = 0;
+  const onL = () => {
+    if (++lCount < 2) return;
+    diffCanvas.width = rawI.naturalWidth || 1280;
+    diffCanvas.height = rawI.naturalHeight || 800;
+    const ctx = diffCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(rawI, 0, 0);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.fillRect(0, 0, diffCanvas.width, diffCanvas.height);
+
+    if (msg.manifest && msg.manifest.length > 0) {
+      const vpW = msg.width || 1280;
+      const vpH = msg.height || 800;
+      const sx = diffCanvas.width / vpW;
+      const sy = diffCanvas.height / vpH;
+
+      for (const item of msg.manifest) {
+        const b = item.box || {};
+        const isImg = item.coordType === 'image' || b.coordType === 'image' || b.x > vpW || b.w > vpW;
+        const curSx = isImg ? 1 : sx;
+        const curSy = isImg ? 1 : sy;
+        const pad = 4;
+        const bx = Math.max(0, Math.round((b.x * curSx) - pad));
+        const by = Math.max(0, Math.round((b.y * curSy) - pad));
+        const bw = Math.min(diffCanvas.width - bx, Math.round((b.w * curSx) + pad * 2));
+        const bh = Math.min(diffCanvas.height - by, Math.round((b.h * curSy) + pad * 2));
+        if (bw <= 2 || bh <= 2) continue;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(bx, by, bw, bh);
+        ctx.clip();
+        ctx.drawImage(sanI, 0, 0);
+        ctx.restore();
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = Math.max(2, Math.round(diffCanvas.width / 400));
+        ctx.strokeRect(bx, by, bw, bh);
+
+        const label = String(item.label || (item.type === 'person_name' ? 'NAME' : item.type) || 'PII').toUpperCase();
+        const badgeText = `REDACTED: ${label}`;
+        const fontSize = Math.max(10, Math.min(14, Math.round(bh * 0.45)));
+        ctx.font = `600 ${fontSize}px sans-serif`;
+        const textW = ctx.measureText(badgeText).width;
+        const badgeH = fontSize + 8;
+        const badgeY = Math.max(0, by - badgeH - 2);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(bx, badgeY, textW + 14, badgeH);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(badgeText, bx + 7, badgeY + fontSize + 2);
+      }
+    }
+    try {
+      diffImg.src = diffCanvas.toDataURL('image/png');
+    } catch {}
+  };
+  diffImg.addEventListener('click', () => {
+    openImageInNewTab(diffImg.src || sanImg.src, 'Browy - Visual Diff (Redacted Delta)');
+  });
+  rawI.onload = onL; sanI.onload = onL;
+  rawI.src = origImg.src; sanI.src = sanImg.src;
+
+  preview.appendChild(origBox);
+  preview.appendChild(sanBox);
+  preview.appendChild(diffBox);
+
+  card.appendChild(header);
+  card.appendChild(stats);
+  card.appendChild(preview);
+
+  if (msg.manifest && msg.manifest.length > 0) {
+    const manifestEl = document.createElement('div');
+    manifestEl.style.fontSize = '9.5px';
+    manifestEl.style.color = 'var(--fg-dim)';
+    manifestEl.style.marginTop = '4px';
+    manifestEl.style.borderTop = '1px dashed var(--border)';
+    manifestEl.style.paddingTop = '4px';
+
+    const countMap = {};
+    for (const item of msg.manifest) {
+      countMap[item.label] = (countMap[item.label] || 0) + 1;
+    }
+    const summary = Object.entries(countMap).map(([k, v]) => `${v}× ${k}`).join(', ');
+    manifestEl.textContent = `Redacted elements: ${summary}`;
+    card.appendChild(manifestEl);
+  }
+
+  b.appendChild(card);
+  row.appendChild(g);
+  row.appendChild(b);
+  $log.appendChild(row);
+  if (stick) $log.scrollTop = $log.scrollHeight;
+}
+
+function openImageInNewTab(dataUrl, title) {
+  const w = window.open('');
+  if (w) {
+    w.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title || 'Preview')}</title><style>body{margin:0;background:#0f172a;display:flex;justify-content:center;align-items:center;min-height:100vh;}img{max-width:96vw;max-height:96vh;border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,0.5);}</style></head><body><img src="${dataUrl}" /></body></html>`);
+  }
+}
+
 
 function relTime(d) {
   const s = (Date.now() - d.getTime()) / 1000;

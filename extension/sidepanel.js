@@ -423,6 +423,20 @@ function browyTranslate(msg) {
       return { type: 'activity', event: msg.event, tool: msg.tool, args: msg.args, durationMs: msg.durationMs, inputCount: msg.inputCount };
     case 'tab.focused':
       return { type: 'focused_tab', url: msg.url, title: msg.title, brand: msg.brand, tabCount: msg.tabCount };
+    case 'privacy.comparison':
+      return {
+        type: 'privacy_comparison',
+        originalBase64: msg.originalBase64,
+        sanitizedBase64: msg.sanitizedBase64,
+        mimeType: msg.mimeType,
+        redactedCount: msg.redactedCount,
+        detectedElementsCount: msg.detectedElementsCount,
+        provider: msg.provider,
+        inferenceMs: msg.inferenceMs,
+        manifest: msg.manifest,
+        width: msg.width,
+        height: msg.height,
+      };
     case 'browsers.status':
       return { type: 'browsers_status', browsers: msg.browsers };
     case 'browsers.active':
@@ -883,6 +897,10 @@ function handle(m) {
     pose('happy', 1100);
     persistChatSoon();
     clearAuthBannerOnSuccess();
+    liveBub = null; liveBody = null; liveSteps = null; liveText = ''; stepNodes.clear();
+  }
+  if (m.type === 'privacy_comparison') {
+    renderPrivacyComparisonCard(m);
   }
   if (m.type === 'browsers_status') {
     renderBrowsers(m.browsers || []);
@@ -1059,6 +1077,340 @@ function summarizeResult(result, status) {
   return oneline;
 }
 
+let privacyModalEl = null;
+function ensurePrivacyModal() {
+  if (privacyModalEl && document.contains(privacyModalEl)) return privacyModalEl;
+  const m = document.createElement('div');
+  m.className = 'privacy-modal';
+  m.innerHTML = `
+    <div class="privacy-modal-content">
+      <div class="privacy-modal-header">
+        <span class="privacy-modal-title">Inspection</span>
+        <button class="privacy-modal-close" title="Close (Esc)">×</button>
+      </div>
+      <img class="privacy-modal-img" src="" alt="Full Screen Inspection" />
+    </div>
+  `;
+  const close = () => m.classList.remove('show');
+  m.querySelector('.privacy-modal-close').addEventListener('click', close);
+  m.addEventListener('click', (e) => {
+    if (e.target === m) close();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && m.classList.contains('show')) close();
+  });
+  document.body.appendChild(m);
+  privacyModalEl = m;
+  return m;
+}
+
+function openPrivacyModal(title, imgSrc) {
+  const modal = ensurePrivacyModal();
+  modal.querySelector('.privacy-modal-title').textContent = title;
+  modal.querySelector('.privacy-modal-img').src = imgSrc;
+  modal.classList.add('show');
+}
+
+function renderPrivacyComparisonCard(data) {
+  try { empty?.remove(); } catch {}
+  ensureLiveBubble();
+  const card = document.createElement('div');
+  card.className = 'privacy-card';
+
+  const origSrc = `data:${data.mimeType || 'image/png'};base64,${data.originalBase64}`;
+  const saniSrc = `data:${data.mimeType || 'image/png'};base64,${data.sanitizedBase64}`;
+  const redCount = data.redactedCount || 0;
+  const prov = (data.provider || 'wasm').toUpperCase();
+  const dur = data.inferenceMs || 0;
+
+  card.innerHTML = `
+    <div class="privacy-head">
+      <div class="privacy-title-group">
+        <span class="privacy-shield-icon">🛡️</span>
+        <span>Local Privacy Shield</span>
+        <span class="privacy-badge">${redCount} item${redCount === 1 ? '' : 's'} shielded</span>
+      </div>
+      <div class="privacy-metrics">ONNX [${prov}] ${dur ? dur + 'ms' : ''}</div>
+    </div>
+    <div class="privacy-tabs">
+      <button type="button" class="privacy-tab-btn active" data-view="split">Side by Side</button>
+      <button type="button" class="privacy-tab-btn" data-view="slider">Split Slider</button>
+      <button type="button" class="privacy-tab-btn" data-view="diff">Visual Diff</button>
+      <button type="button" class="privacy-tab-btn" data-view="you">What You See</button>
+      <button type="button" class="privacy-tab-btn" data-view="ai">What AI Sees</button>
+    </div>
+    <div class="privacy-view-split">
+      <div class="privacy-pane">
+        <div class="privacy-pane-header">
+          <span>What You See</span>
+          <span class="privacy-pane-tag you">Unmodified Screen</span>
+        </div>
+        <div class="privacy-img-frame" title="Click to zoom">
+          <img src="${origSrc}" alt="What You See (Raw Screenshot)" />
+        </div>
+      </div>
+      <div class="privacy-pane">
+        <div class="privacy-pane-header">
+          <span>What AI Sees</span>
+          <span class="privacy-pane-tag ai">Redacted For AI</span>
+        </div>
+        <div class="privacy-img-frame" title="Click to zoom">
+          <img src="${saniSrc}" alt="What AI Sees (Sanitized Context)" />
+        </div>
+      </div>
+    </div>
+    <div class="privacy-view-slider">
+      <div class="privacy-slider-container">
+        <span class="privacy-slider-label left">What You See</span>
+        <span class="privacy-slider-label right">What AI Sees</span>
+        <div class="privacy-slider-before">
+          <img src="${origSrc}" alt="What You See" />
+        </div>
+        <div class="privacy-slider-after" style="width: 50%;">
+          <img src="${saniSrc}" alt="What AI Sees" />
+        </div>
+        <div class="privacy-slider-handle" style="left: 50%;">↔</div>
+      </div>
+    </div>
+    <div class="privacy-view-diff">
+      <div class="privacy-diff-container" title="Click to zoom diff">
+        <span class="privacy-diff-tag">Δ Visual Redaction Diff</span>
+        <canvas class="privacy-diff-canvas"></canvas>
+      </div>
+    </div>
+    <div class="privacy-view-single privacy-single-you">
+      <div class="privacy-img-frame" title="Click to zoom">
+        <img src="${origSrc}" alt="What You See" />
+      </div>
+    </div>
+    <div class="privacy-view-single privacy-single-ai">
+      <div class="privacy-img-frame" title="Click to zoom">
+        <img src="${saniSrc}" alt="What AI Sees" />
+      </div>
+    </div>
+    <div class="privacy-manifest-toggle">
+      <span><b>Redaction Manifest</b> · ${redCount} private region${redCount === 1 ? '' : 's'} burned out locally</span>
+      <span class="privacy-arrow">▾</span>
+    </div>
+    <div class="privacy-manifest-content"></div>
+  `;
+
+  // Render high-precision canvas visual diff with dynamic redaction
+  const diffCanvas = card.querySelector('.privacy-diff-canvas');
+  let diffRendered = false;
+  const renderDiffCanvas = () => {
+    if (!diffCanvas) return;
+    const rawImg = new Image();
+    const saniImg = new Image();
+    let loadedCount = 0;
+    const onLoaded = () => {
+      loadedCount++;
+      if (loadedCount < 2) return;
+      diffRendered = true;
+      diffCanvas.width = rawImg.naturalWidth || 1280;
+      diffCanvas.height = rawImg.naturalHeight || 800;
+      const ctx = diffCanvas.getContext('2d');
+      if (!ctx) return;
+
+      // 1. Draw raw screenshot as the spatial context base
+      ctx.drawImage(rawImg, 0, 0);
+
+      // 2. Dim unchanged page background to highlight redaction regions
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+      ctx.fillRect(0, 0, diffCanvas.width, diffCanvas.height);
+
+      // 3. Dynamically redact all sensitive entities in the diff image
+      if (data.manifest && data.manifest.length > 0) {
+        const vpW = data.width || 1280;
+        const vpH = data.height || 800;
+        const sx = diffCanvas.width / vpW;
+        const sy = diffCanvas.height / vpH;
+
+        for (const item of data.manifest) {
+          const b = item.box || {};
+          const isImgCoords = item.coordType === 'image' || b.coordType === 'image' || b.x > vpW || b.w > vpW;
+          const curSx = isImgCoords ? 1 : sx;
+          const curSy = isImgCoords ? 1 : sy;
+
+          const pad = 4;
+          const bx = Math.max(0, Math.round((b.x * curSx) - pad));
+          const by = Math.max(0, Math.round((b.y * curSy) - pad));
+          const bw = Math.min(diffCanvas.width - bx, Math.round((b.w * curSx) + pad * 2));
+          const bh = Math.min(diffCanvas.height - by, Math.round((b.h * curSy) + pad * 2));
+
+          if (bw <= 2 || bh <= 2) continue;
+
+          // DYNAMIC REDACTION: Draw sanitized image pixels in this region
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(bx, by, bw, bh);
+          ctx.clip();
+          ctx.drawImage(saniImg, 0, 0);
+          ctx.restore();
+
+          // Opaque dark redaction shield so zero raw text or personal data can ever bleed through
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+          ctx.fillRect(bx, by, bw, bh);
+
+          // Vibrant neon red delta tint
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
+          ctx.fillRect(bx, by, bw, bh);
+
+          // Bold neon red stroke
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = Math.max(2, Math.round(diffCanvas.width / 400));
+          ctx.strokeRect(bx, by, bw, bh);
+
+          // Draw label badge: [REDACTED: NAME]
+          const label = String(item.label || (item.type === 'person_name' ? 'NAME' : item.type) || 'PII').toUpperCase();
+          const badgeText = `REDACTED: ${label}`;
+          const fontSize = Math.max(10, Math.min(14, Math.round(bh * 0.45)));
+          ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+          const textW = ctx.measureText(badgeText).width;
+          const badgeH = fontSize + 8;
+          const badgeY = Math.max(0, by - badgeH - 2);
+
+          // Draw pill badge
+          ctx.fillStyle = '#ef4444';
+          ctx.fillRect(bx, badgeY, textW + 14, badgeH);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(badgeText, bx + 7, badgeY + fontSize + 2);
+
+          // Draw inner centered label if height allows
+          if (bh >= 18 && bw >= 50) {
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = `600 ${Math.min(12, fontSize)}px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif`;
+            const innerText = `[REDACTED: ${label}]`;
+            const innerW = ctx.measureText(innerText).width;
+            if (innerW < bw - 8) {
+              const innerX = bx + Math.round((bw - innerW) / 2);
+              const innerY = by + Math.round((bh / 2) + (fontSize * 0.35));
+              ctx.fillText(innerText, innerX, innerY);
+            }
+          }
+        }
+      }
+    };
+    rawImg.onload = onLoaded;
+    saniImg.onload = onLoaded;
+    rawImg.onerror = onLoaded;
+    saniImg.onerror = onLoaded;
+    rawImg.src = origSrc;
+    saniImg.src = saniSrc;
+  };
+
+  // Pre-render diff canvas in background
+  renderDiffCanvas();
+
+  // Populate manifest drawer
+  const manifestDrawer = card.querySelector('.privacy-manifest-content');
+  if (data.manifest && data.manifest.length > 0) {
+    for (const item of data.manifest) {
+      const row = document.createElement('div');
+      row.className = 'privacy-manifest-item';
+      const box = item.box || {};
+      const coordStr = `(x: ${box.x ?? '—'}, y: ${box.y ?? '—'}, w: ${box.w ?? '—'}, h: ${box.h ?? '—'})`;
+      row.innerHTML = `
+        <span class="privacy-manifest-tag">${item.label || item.type?.toUpperCase?.() || 'PII'}</span>
+        <span>${item.type || 'sensitive'}</span>
+        <span style="opacity:0.6; margin-left:auto;">${coordStr}</span>
+      `;
+      manifestDrawer.appendChild(row);
+    }
+  } else {
+    manifestDrawer.innerHTML = '<div style="opacity:0.6;">No visual PII regions detected on this frame.</div>';
+  }
+
+  // Toggle manifest
+  const toggleBtn = card.querySelector('.privacy-manifest-toggle');
+  toggleBtn.addEventListener('click', () => {
+    const isOpen = manifestDrawer.classList.toggle('open');
+    card.querySelector('.privacy-arrow').textContent = isOpen ? '▴' : '▾';
+  });
+
+  // Zoom / Lightbox click
+  card.querySelectorAll('.privacy-img-frame').forEach((frame) => {
+    frame.addEventListener('click', () => {
+      const img = frame.querySelector('img');
+      if (img) openPrivacyModal(img.alt || 'Inspection', img.src);
+    });
+  });
+  card.querySelector('.privacy-diff-container')?.addEventListener('click', () => {
+    try {
+      const dataUrl = diffCanvas.toDataURL('image/png');
+      openPrivacyModal('Visual Diff (Masked Delta Regions)', dataUrl);
+    } catch {
+      openPrivacyModal('Visual Diff (Sanitized Context)', saniSrc);
+    }
+  });
+
+  // Tab switching
+  const tabs = card.querySelectorAll('.privacy-tab-btn');
+  const viewSplit = card.querySelector('.privacy-view-split');
+  const viewSlider = card.querySelector('.privacy-view-slider');
+  const viewDiff = card.querySelector('.privacy-view-diff');
+  const viewSingleYou = card.querySelector('.privacy-single-you');
+  const viewSingleAi = card.querySelector('.privacy-single-ai');
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      tabs.forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      const view = tab.getAttribute('data-view');
+
+      viewSplit.style.display = view === 'split' ? 'grid' : 'none';
+      viewSlider.style.display = view === 'slider' ? 'block' : 'none';
+      viewDiff.style.display = view === 'diff' ? 'block' : 'none';
+      viewSingleYou.style.display = view === 'you' ? 'block' : 'none';
+      viewSingleAi.style.display = view === 'ai' ? 'block' : 'none';
+
+      if (view === 'diff') renderDiffCanvas();
+    });
+  });
+
+  // Slider drag interaction
+  const sliderContainer = card.querySelector('.privacy-slider-container');
+  const sliderAfter = card.querySelector('.privacy-slider-after');
+  const sliderHandle = card.querySelector('.privacy-slider-handle');
+  let isDragging = false;
+
+  const updateSlider = (clientX) => {
+    const rect = sliderContainer.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const pct = Math.round((offsetX / rect.width) * 100);
+    sliderAfter.style.width = pct + '%';
+    sliderHandle.style.left = pct + '%';
+  };
+
+  sliderContainer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    updateSlider(e.clientX);
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (isDragging) updateSlider(e.clientX);
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; });
+
+  sliderContainer.addEventListener('touchstart', (e) => {
+    isDragging = true;
+    if (e.touches[0]) updateSlider(e.touches[0].clientX);
+  }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (isDragging && e.touches[0]) updateSlider(e.touches[0].clientX);
+  }, { passive: true });
+  window.addEventListener('touchend', () => { isDragging = false; });
+
+  // Place card inside live bubble right above tool steps or body
+  if (liveSteps) {
+    liveBub.insertBefore(card, liveSteps);
+  } else if (liveBody) {
+    liveBub.insertBefore(card, liveBody);
+  } else {
+    liveBub.appendChild(card);
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
 function renderToolStep(m) {
   ensureLiveBubble();
   let node = stepNodes.get(m.id);
@@ -1186,6 +1538,7 @@ function addAuthErrorBubble(detail) {
 function send() {
   const t = inp.value.trim();
   if (!t || busy || !ws || ws.readyState !== 1) return;
+  liveBub = null; liveBody = null; liveSteps = null; liveText = ''; stepNodes.clear();
   ws.send(JSON.stringify({ type: 'chat', text: t }));
   addBub('u', t);
   inp.value = ''; autoSize();

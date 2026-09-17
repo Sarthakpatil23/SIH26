@@ -529,6 +529,22 @@ function translateWsToProtocol(
           }
         : null;
 
+    case 'privacy_comparison':
+      return activeSessionId
+        ? {
+            type: 'privacy.comparison',
+            sessionId: activeSessionId,
+            originalBase64: ws.originalBase64,
+            sanitizedBase64: ws.sanitizedBase64,
+            mimeType: ws.mimeType,
+            redactedCount: ws.redactedCount,
+            detectedElementsCount: ws.detectedElementsCount,
+            provider: ws.provider,
+            inferenceMs: ws.inferenceMs,
+            manifest: ws.manifest,
+          }
+        : null;
+
     // ── Broadcast (no sessionId — runner fans out to all attached sessions) ──
     case 'focused_tab':
       return {

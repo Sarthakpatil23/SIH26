@@ -403,6 +403,19 @@ export interface ProviderTestResult {
   models?: string[];
 }
 
+export interface PrivacyComparisonEvt {
+  type: 'privacy.comparison';
+  sessionId: string;
+  originalBase64: string;
+  sanitizedBase64: string;
+  mimeType: string;
+  redactedCount: number;
+  detectedElementsCount: number;
+  provider: string;
+  inferenceMs: number;
+  manifest: Array<{ type: string; label?: string; box: { x: number; y: number; w: number; h: number } }>;
+}
+
 export type ServerMessage =
   | ServerHello
   | SessionReady
@@ -428,7 +441,8 @@ export type ServerMessage =
   | ChatHistoryResult
   | ChatDeleteResult
   | ProviderListResult
-  | ProviderTestResult;
+  | ProviderTestResult
+  | PrivacyComparisonEvt;
 
 // ── Transport interface ────────────────────────────────────────────────────
 //

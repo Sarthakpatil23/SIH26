@@ -95,7 +95,18 @@ export type WSMessage =
   | { type: 'launch_result'; brand: string; ok: boolean; error?: string }
   | { type: 'copilot_signin' }
   | { type: 'copilot_status'; state: 'ready' | 'unauth' | 'unknown'; detail?: string }
-  | { type: 'connected'; tabs: { id: number; title: string; url: string }[] };
+  | { type: 'connected'; tabs: { id: number; title: string; url: string }[] }
+  | {
+      type: 'privacy_comparison';
+      originalBase64: string;
+      sanitizedBase64: string;
+      mimeType: string;
+      redactedCount: number;
+      detectedElementsCount: number;
+      provider: string;
+      inferenceMs: number;
+      manifest: Array<{ type: string; label?: string; box: { x: number; y: number; w: number; h: number } }>;
+    };
 
 export interface BrowserStatus {
   brand: string;
